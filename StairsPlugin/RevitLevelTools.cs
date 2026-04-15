@@ -9,6 +9,39 @@ using System.Threading.Tasks;
 
 namespace StairsPlugin
 {
+    public class RevitLevelTools
+    {
+        public static List<Level> GetLevels(Document doc)
+        {
+            return new FilteredElementCollector(doc)
+                .OfClass(typeof(Level))
+                .Cast<Level>()
+                .OrderBy(l=>l.Elevation)
+                .ToList();
+        }
+
+        public static string FormatLevelDisplay(Level level) {
+            double elevMm = UnitUtils.ConvertFromInternalUnits(
+                level.Elevation, UnitTypeId.Millimeters);
+
+            string sign;
+            if (Math.Abs(elevMm) < 0.5)        // 视为 ±0
+                sign = "±";
+            else if (elevMm > 0)
+                sign = "+";
+            else
+                sign = "";                      // 负数自带负号
+
+            return $"{level.Name}  {sign}{elevMm:F0} mm";
+        }
+
+        public static double GetHeightDifferenceMm(Level baseLevel, Level topLevel)
+        {
+            double diffFt = topLevel.Elevation - baseLevel.Elevation;
+            return UnitUtils.ConvertFromInternalUnits(diffFt, UnitTypeId.Millimeters);
+        }
+    }
+
     [Transaction(TransactionMode.Manual)]
     public class CommandShowLevel : IExternalCommand
     {
@@ -19,11 +52,7 @@ namespace StairsPlugin
 
             try
             {
-                List<Level> levels = new FilteredElementCollector(doc)
-                    .OfClass(typeof(Level))
-                    .Cast<Level>()
-                    .OrderBy(l=>l.Elevation)
-                    .ToList();
+                List<Level> levels = RevitLevelTools.GetLevels(doc);
 
                 if (levels.Count == 0)
                 {
@@ -35,21 +64,7 @@ namespace StairsPlugin
 
                 foreach (Level level in levels)
                 {
-                    double elevationFeet = level.Elevation;
-                    double elevationMeter = UnitUtils.ConvertFromInternalUnits(elevationFeet, UnitTypeId.Meters);
-
-                    string sign = "";
-                    if (Math.Abs(elevationMeter) < 0.0001)
-                    {
-                        sign = "±";
-                    }
-                    else if (elevationMeter > 0)
-                    {
-                        sign = "+";
-                    }
-                    string formattedElev = sign + elevationMeter.ToString("0.000");
-
-                    sb.AppendLine($"{level.Name}--{formattedElev}");
+                    sb.AppendLine(RevitLevelTools.FormatLevelDisplay(level));
                 }
 
                 TaskDialog mainDialog = new TaskDialog("标高列表");

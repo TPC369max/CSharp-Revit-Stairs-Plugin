@@ -2,6 +2,7 @@
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
+    <LangVersion>9.0</LangVersion>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -53,8 +54,15 @@
     <Compile Include="CommandStairManager.cs" />
     <Compile Include="FixedParaStairs.cs" />
     <Compile Include="Main.cs" />
+    <Compile Include="Model\ClearanceChecker.cs" />
+    <Compile Include="Model\StairCalculator.cs" />
+    <Compile Include="Model\StairCodeLibrary.cs" />
+    <Compile Include="Model\StairCodeParams.cs" />
+    <Compile Include="ViewModel\RelayCommand.cs" />
     <Compile Include="RevitLevelTools.cs" />
-    <Compile Include="StairGeneratorWindow.xaml.cs">
+    <Compile Include="ViewModel\ViewModelBase.cs" />
+    <Compile Include="ViewModel\ViewModel.cs" />
+    <Compile Include="View\StairGeneratorWindow.xaml.cs">
       <DependentUpon>StairGeneratorWindow.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
@@ -73,6 +81,7 @@
       <HintPath>D:\Program Files\Autodesk\Revit 2022\RevitAPIUI.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="System" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
@@ -80,10 +89,13 @@
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <ItemGroup>
-    <Page Include="StairGeneratorWindow.xaml">
+    <Page Include="View\StairGeneratorWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Utils\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
