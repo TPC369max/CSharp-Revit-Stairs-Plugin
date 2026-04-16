@@ -24,13 +24,13 @@ namespace StairsPlugin.Views
     public partial class StairGeneratorWindow : Window
     {
         // ViewModel 引用：拾取完成后写入 P1/P2，其余全部通过绑定
-        private readonly StairsPlugin.ViewModel.ViewModel _vm;
+        private readonly ViewModel.ViewModel _vm;
         private readonly UIDocument _uiDoc;
 
         // =========================================================
         //  构造函数：只做两件事——绑定 DataContext，保存 uiDoc 引用
         // =========================================================
-        public StairGeneratorWindow(UIDocument uiDoc, StairsPlugin.ViewModel.ViewModel vm)
+        public StairGeneratorWindow(UIDocument uiDoc, ViewModel.ViewModel vm)
         {
             InitializeComponent();
 
@@ -90,7 +90,8 @@ namespace StairsPlugin.Views
         // =========================================================
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = false;
+            _vm.IsConfirmed = false;
+            SetDialogResultSafe(false);
             Close();
         }
 
@@ -100,8 +101,46 @@ namespace StairsPlugin.Views
         // =========================================================
         private void OnGenerateRequested(object sender, EventArgs e)
         {
-            DialogResult = true;
+            _vm.IsConfirmed = true;
+            SetDialogResultSafe(true);
             Close();
+        }
+
+        // =========================================================
+        //  安全设置 DialogResult：
+        //  只有通过 ShowDialog() 打开的模态窗口才能设置此属性。
+        //  在 Revit AddInManager 的调试环境下，窗口有时以非模态方式
+        //  运行，此时设置 DialogResult 会抛 InvalidOperationException。
+        //  通过 IsModal 检测规避此问题；调用方改为读取 vm.IsConfirmed。
+        // =========================================================
+        private void SetDialogResultSafe(bool result)
+        {
+            // WPF 内部：只有 _showingAsDialog == true 时 DialogResult 才可写。
+            // 用 try/catch 做最终保障，IsModal 判断做前置过滤。
+            if (!IsModal())
+                return;
+            try
+            {
+                DialogResult = result;
+            }
+            catch (InvalidOperationException) { /* 非模态，忽略 */ }
+        }
+
+        /// <summary>
+        /// 判断当前窗口是否以模态（ShowDialog）方式打开。
+        /// 通过反射读取 WPF 内部字段 _showingAsDialog。
+        /// </summary>
+        private bool IsModal()
+        {
+            try
+            {
+                var field = typeof(Window).GetField(
+                    "_showingAsDialog",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic);
+                return field != null && (bool)field.GetValue(this);
+            }
+            catch { return false; }
         }
 
         // 窗口关闭时解除事件订阅，防止内存泄漏
