@@ -9,6 +9,15 @@ using System.Threading.Tasks;
 
 namespace StairsPlugin
 {
+    public class StairsFailurePreprocessor : IFailuresPreprocessor
+    {
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor)
+        {
+            failuresAccessor.DeleteAllWarnings();
+            return FailureProcessingResult.Continue;
+        }
+    }
+
     public class RevitLevelTools
     {
         public static List<Level> GetLevels(Document doc)

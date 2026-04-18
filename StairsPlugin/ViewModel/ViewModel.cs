@@ -1,6 +1,6 @@
 ﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using StairsPlugin.Model;
-using StairsPlugin.ViewModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -15,30 +15,26 @@ namespace StairsPlugin.ViewModel
     ///   ✓ 所有界面状态属性（标高列表、预览文字、合规标志）
     ///   ✓ 规范校验与踏步解算（调用 Model 层）
     ///   ✓ 命令定义（GenerateCommand）
-    ///   ✓ 通过事件通知 View 关闭窗口
+    ///   ✓ 点击"生成"时通过 ExternalEvent.Raise() 异步触发事务
     ///   ✗ 不持有任何 WPF 控件引用
     ///   ✗ 不调用 UIDocument.Selection（拾取点由 Code-behind 完成后写入 P1/P2）
+    ///   ✗ 不包含 ShowDialog / DialogResult / IsConfirmed（已随模态方案废弃）
+    ///
+    /// ★ 架构变更（对应 AI对话.txt 建议）：
+    ///   旧：通过 GenerateRequested 事件通知 View 关窗（模态方案）
+    ///   新：通过 ExternalEvent.Raise() 异步触发 StairGlobalEventHandler（非模态方案）
     /// </summary>
     public class ViewModel : ViewModelBase
     {
         // =============================================================
-        //  事件：通知 View 层"参数合法，可以关窗并执行生成"
-        //  View 的 Code-behind 订阅此事件后调用 DialogResult = true; Close()
+        //  外部事件（非模态架构核心）
+        //  由 CommandStairGenerator 构建后注入，OnGenerate() 调用 Raise()
         // =============================================================
-        public event EventHandler GenerateRequested;
-
-        // =============================================================
-        //  用户意图标志：替代 DialogResult 在非模态场景下的判断依据。
-        //  true  = 用户点击"生成楼梯"且校验通过
-        //  false = 用户点击"取消"或直接关闭窗口（默认值）
-        //  CommandStairGenerator 弹窗后读此属性，而非依赖 ShowDialog 返回值。
-        // =============================================================
-        public bool IsConfirmed { get; set; } = false;
+        private readonly ExternalEvent _externalEvent;
+        private readonly StairGlobalEventHandler _handler;
 
         // =============================================================
         //  标高数据
-        //  Levels        : Level 对象列表，由 CommandStairGenerator 注入
-        //  LevelDisplayNames : 格式化字符串列表，绑定到两个标高 ComboBox 的 ItemsSource
         // =============================================================
         public List<Level> Levels { get; } = new List<Level>();
 
@@ -72,8 +68,8 @@ namespace StairsPlugin.ViewModel
             }
         }
 
-        /// <summary>总高度显示文字（只读，绑定到标高 ComboBox 旁的蓝色标签）</summary>
         private string _totalHeightDisplay = "— mm";
+        /// <summary>总高度显示文字（只读，绑定到标高 ComboBox 旁的蓝色标签）</summary>
         public string TotalHeightDisplay
         {
             get => _totalHeightDisplay;
@@ -166,10 +162,7 @@ namespace StairsPlugin.ViewModel
             }
         }
 
-        /// <summary>
-        /// P2 拾取按钮的 IsEnabled 来源（绑定到 BtnPickP2.IsEnabled）。
-        /// 只有 P1 已拾取时才允许拾取 P2。
-        /// </summary>
+        /// <summary>P2 拾取按钮的 IsEnabled（绑定到 BtnPickP2.IsEnabled）</summary>
         public bool CanPickP2 => P1 != null;
 
         /// <summary>P1→P2 方向角（弧度），生成时传给 Transform.CreateRotation</summary>
@@ -242,7 +235,6 @@ namespace StairsPlugin.ViewModel
             set => SetField(ref _generateRailing, value);
         }
 
-        // 栏杆类型 ComboBox（仅 GenerateRailing = true 时可用）
         public ObservableCollection<string> RailingTypeNames
         {
             get;
@@ -278,7 +270,6 @@ namespace StairsPlugin.ViewModel
         //  合规标志（绑定到 Badge 的 DataTrigger 和 PanelWarn 的 Visibility）
         // =============================================================
         private bool _runWidthOk = true;
-        /// <summary>梯段净宽合规 → Badge DataTrigger 的绑定源</summary>
         public bool RunWidthOk
         {
             get => _runWidthOk;
@@ -290,7 +281,6 @@ namespace StairsPlugin.ViewModel
         }
 
         private bool _treadDepthOk = true;
-        /// <summary>踏步宽度合规 → Badge DataTrigger 的绑定源</summary>
         public bool TreadDepthOk
         {
             get => _treadDepthOk;
@@ -301,16 +291,14 @@ namespace StairsPlugin.ViewModel
             }
         }
 
-        /// <summary>梯段净宽徽章文字（合规时显示 "合规"，违规时显示具体数值）</summary>
         public string RunWidthBadgeText => RunWidthOk
             ? "合规" : $"违规 < {_currentRule?.MinRunWidth} mm";
 
-        /// <summary>踏步宽度徽章文字</summary>
         public string TreadDepthBadgeText => TreadDepthOk
             ? "合规" : $"违规 < {_currentRule?.MinTreadDepth} mm";
 
         private bool _hasViolation = false;
-        /// <summary>是否存在违规 → 绑定到 PanelWarn.Visibility（BooleanToVisibilityConverter）</summary>
+        /// <summary>是否存在违规 → 绑定到 PanelWarn.Visibility</summary>
         public bool HasViolation
         {
             get => _hasViolation;
@@ -339,7 +327,7 @@ namespace StairsPlugin.ViewModel
         private StairCodeParams _currentRule;
 
         // =============================================================
-        //  对外只读属性（供 CommandStairGenerator 读取生成参数）
+        //  对外只读属性（供 StairGlobalEventHandler 读取生成参数）
         // =============================================================
         public Level SelectedBaseLevel =>
             (BaseLevelIndex >= 0 && BaseLevelIndex < Levels.Count)
@@ -357,9 +345,15 @@ namespace StairsPlugin.ViewModel
 
         // =============================================================
         //  构造函数
+        //  ★ 接收 ExternalEvent + Handler（非模态架构必须）
         // =============================================================
-        public ViewModel()
+        public ViewModel(ExternalEvent externalEvent, StairGlobalEventHandler handler)
         {
+            _externalEvent = externalEvent
+                ?? throw new ArgumentNullException(nameof(externalEvent));
+            _handler = handler
+                ?? throw new ArgumentNullException(nameof(handler));
+
             // 初始化规范（默认住宅）
             _currentRule = StairCodeLibrary.Rules[Model.BuildingType.Residential];
 
@@ -371,10 +365,9 @@ namespace StairsPlugin.ViewModel
         }
 
         // =============================================================
-        //  公共方法：由 CommandStairGenerator 在 ShowDialog 前调用，注入数据
+        //  公共方法：由 CommandStairGenerator 在 Show 前调用，注入数据
         // =============================================================
 
-        /// <summary>注入标高列表（从 RevitLevelTools.GetLevels 获取）</summary>
         public void LoadLevels(IEnumerable<Level> levels)
         {
             Levels.AddRange(levels);
@@ -386,7 +379,6 @@ namespace StairsPlugin.ViewModel
             TopLevelIndex = Levels.Count > 1 ? 1 : -1;
         }
 
-        /// <summary>注入楼梯族名称列表</summary>
         public void LoadStairsTypes(IEnumerable<string> names)
         {
             StairsTypeNames.Clear();
@@ -395,7 +387,6 @@ namespace StairsPlugin.ViewModel
             StairsTypeIndex = StairsTypeNames.Any() ? 0 : -1;
         }
 
-        /// <summary>注入栏杆族名称列表</summary>
         public void LoadRailingTypes(IEnumerable<string> names)
         {
             RailingTypeNames.Clear();
@@ -445,7 +436,6 @@ namespace StairsPlugin.ViewModel
             // 调用 Model 层踏步解算
             _calcResult = StairCalculator.Calculate(totalMm, _currentRule);
 
-            // 通知所有预览属性刷新
             OnPropertyChanged(nameof(PreviewSteps));
             OnPropertyChanged(nameof(PreviewRiser));
             OnPropertyChanged(nameof(PreviewDist));
@@ -483,10 +473,16 @@ namespace StairsPlugin.ViewModel
             OnPropertyChanged(nameof(PreviewRule));
         }
 
-        /// <summary>GenerateCommand 的 Execute 委托：触发事件通知 View 关窗</summary>
+        /// <summary>
+        /// GenerateCommand 的 Execute 委托。
+        /// ★ 新方案：将自身引用写入 Handler，然后调用 ExternalEvent.Raise()。
+        ///   Revit 将在下一个空闲时间点异步回调 StairGlobalEventHandler.Execute()。
+        ///   无需通知 View 关窗，用户可保持窗口开启以便连续生成。
+        /// </summary>
         private void OnGenerate()
         {
-            GenerateRequested?.Invoke(this, EventArgs.Empty);
+            _handler.ViewModel = this; // 传递当前参数快照引用
+            _externalEvent.Raise();    // 异步触发 Revit 事务
         }
 
         // =============================================================

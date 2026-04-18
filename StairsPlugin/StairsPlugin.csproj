@@ -50,14 +50,12 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CommandGetDirection.cs" />
-    <Compile Include="CommandStairManager.cs" />
-    <Compile Include="FixedParaStairs.cs" />
     <Compile Include="Main.cs" />
     <Compile Include="Model\ClearanceChecker.cs" />
     <Compile Include="Model\StairCalculator.cs" />
     <Compile Include="Model\StairCodeLibrary.cs" />
     <Compile Include="Model\StairCodeParams.cs" />
+    <Compile Include="Stairglobalevent.cs" />
     <Compile Include="ViewModel\RelayCommand.cs" />
     <Compile Include="RevitLevelTools.cs" />
     <Compile Include="ViewModel\ViewModelBase.cs" />

@@ -12,10 +12,14 @@ namespace StairsPlugin
     /// <summary>
     /// 双跑平行楼梯自动生成插件的主入口。
     ///
-    /// 职责：
+    /// 职责（精简后）：
     ///   1. 从 Revit 文档读取项目数据（标高、楼梯族、栏杆族）
-    ///   2. 注入 ViewModel，弹出 WPF 窗口
-    ///   3. 用户确认后，读取 ViewModel 参数，执行楼梯生成事务
+    ///   2. 创建 ExternalEvent + Handler，注入 ViewModel
+    ///   3. 以非模态（Show）方式弹出 WPF 窗口后立即返回 Succeeded
+    ///
+    /// 生成事务已迁移至 StairGlobalEventHandler.Execute()，
+    /// 由用户点击"生成"后通过 ExternalEvent.Raise() 异步触发。
+    /// 这彻底解决了 PickPoint 与 ShowDialog 的消息循环冲突。
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     public class CommandStairGenerator : IExternalCommand
@@ -28,10 +32,15 @@ namespace StairsPlugin
 
             try
             {
-                // ── 步骤 1：构建 ViewModel 并注入项目数据 ──────────────────
-                var vm = new ViewModel.ViewModel();
+                // ── 步骤 1：创建外部事件 + 处理器 ────────────────────────────
+                // Handler 持有生成逻辑，ViewModel 在"生成"时将自身引用写入 Handler
+                var handler = new StairGlobalEventHandler { UIDoc = uiDoc };
+                ExternalEvent externalEvent = ExternalEvent.Create(handler);
 
-                // 标高列表（使用 RevitLevelTools 工具方法）
+                // ── 步骤 2：构建 ViewModel 并注入项目数据 ──────────────────
+                var vm = new ViewModel.ViewModel(externalEvent, handler);
+
+                // 标高列表
                 vm.LoadLevels(RevitLevelTools.GetLevels(doc));
 
                 // 楼梯系统族类型名称
@@ -50,148 +59,23 @@ namespace StairsPlugin
                     .ToList();
                 vm.LoadRailingTypes(railingTypeNames);
 
-                // ── 步骤 2：弹出窗口，等待用户操作 ─────────────────────────
+                // ── 步骤 3：非模态显示 WPF 窗口 ──────────────────────────────
+                // 使用 Show() 而非 ShowDialog()：
+                //   - WPF 消息循环不再阻塞 Revit 主线程
+                //   - BtnPickP1/P2 可以安全地 Hide()/Show()
+                //   - 生成逻辑由 ExternalEvent 异步执行，不依赖 Execute() 上下文
                 var win = new StairGeneratorWindow(uiDoc, vm);
 
-                // ShowDialog() 在正式 Ribbon 按钮调用时返回 bool?
-                // AddInManager 调试时可能以非模态运行，此时返回值不可靠。
-                // 统一改为读取 vm.IsConfirmed（由 View 层在关窗前写入）。
-                win.ShowDialog();
+                // 设置 Owner 保证窗口层级正确（始终显示在 Revit 主窗口之上）
+                var helper = new System.Windows.Interop.WindowInteropHelper(win);
+                helper.Owner = commandData.Application.MainWindowHandle;
 
-                if (!vm.IsConfirmed)
-                    return Result.Cancelled;
+                win.Show(); // 非模态：立即返回，窗口独立存活
 
-                // ── 步骤 3：从 ViewModel 读取所有生成参数 ────────────────────
-                Level baseLevel = vm.SelectedBaseLevel;
-                Level topLevel = vm.SelectedTopLevel;
-                XYZ insertionPt = vm.P1;          // 平面插入点（Revit内部单位）
-                double angleRad = vm.DirectionAngleRad; // 旋转角（弧度）
-                bool clockwise = vm.IsClockwise;
-
-                // 几何参数（mm → 英尺，Revit内部单位）
-                double runWidthFt = MmToFt(vm.RunWidthMm);
-                double treadDepthFt = MmToFt(vm.TreadDepthMm);
-                double wellWidthFt = MmToFt(vm.WellWidthMm);
-                double landingDepthFt = MmToFt(vm.LandingDepthMm);
-                double baseOffsetFt = MmToFt(vm.BaseOffsetMm);
-
-                // 总高（英尺）
-                double totalHeightFt = topLevel.Elevation - baseLevel.Elevation + baseOffsetFt;
-
-                // 踏步解算结果（直接用 ViewModel 缓存，已在校验时解算）
-                var calcResult = StairCalculator.Calculate(
-                    vm.CurrentRule.MaxRiserHeight > 0
-                        ? FtToMm(totalHeightFt)
-                        : 3600,
-                    vm.CurrentRule);
-
-                double riserFt = MmToFt(calcResult.RiserHeight);
-
-                // ── 步骤 4：楼梯生成事务 ─────────────────────────────────────
-                ElementId stairsId = ElementId.InvalidElementId;
-                ElementId run1Id = ElementId.InvalidElementId;
-
-                using (var scope = new StairsEditScope(doc, "自动生成双跑楼梯"))
-                {
-                    stairsId = scope.Start(baseLevel.Id, topLevel.Id);
-
-                    using (var tx = new Transaction(doc, "绘制梯段与平台"))
-                    {
-                        tx.Start();
-
-                        Stairs stairs = doc.GetElement(stairsId) as Stairs;
-
-                        // 设置总踏步数与踏步深度
-                        stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS)
-                              .Set(calcResult.TotalSteps);
-                        stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH)
-                              .Set(treadDepthFt);
-
-                        // ── 计算两跑的轮廓线（局部坐标）──
-                        // 局部坐标：以 insertionPt 为原点，Y 轴为爬升方向
-                        double run1Length = (calcResult.Run1Steps - 1) * treadDepthFt;
-                        double run2Length = (calcResult.Run2Steps - 1) * treadDepthFt;
-
-                        // 右旋（顺时针）：第一跑朝 +Y，第二跑朝 -Y，横向偏移 runWidth + wellWidth
-                        double lateralOffset = clockwise
-                            ? (runWidthFt + wellWidthFt)
-                            : -(runWidthFt + wellWidthFt);
-
-                        XYZ run1LocalStart = new XYZ(0, 0, 0);
-                        XYZ run1LocalEnd = new XYZ(0, run1Length, 0);
-                        XYZ run2LocalStart = new XYZ(lateralOffset, run1Length, 0);
-                        XYZ run2LocalEnd = new XYZ(lateralOffset, 0, 0);
-
-                        // ── 应用旋转变换（两点向量法算出的 angleRad）──
-                        // 旋转轴：Z 轴（绕铅垂轴旋转平面）
-                        XYZ axis = XYZ.BasisZ;
-                        var rotate = Transform.CreateRotation(axis, angleRad);
-                        var translate = Transform.CreateTranslation(insertionPt);
-                        var transform = translate.Multiply(rotate);
-
-                        XYZ run1Start = transform.OfPoint(run1LocalStart);
-                        XYZ run1End = transform.OfPoint(run1LocalEnd);
-                        XYZ run2Start = transform.OfPoint(run2LocalStart);
-                        XYZ run2End = transform.OfPoint(run2LocalEnd);
-
-                        // ── 创建第一跑 ──
-                        StairsRun run1 = StairsRun.CreateStraightRun(
-                            doc, stairsId,
-                            Line.CreateBound(run1Start, run1End),
-                            StairsRunJustification.Center);
-                        run1.ActualRunWidth = runWidthFt;
-                        run1Id = run1.Id;
-
-                        // ── 创建第二跑（设置起止标高）──
-                        StairsRun run2 = StairsRun.CreateStraightRun(
-                            doc, stairsId,
-                            Line.CreateBound(run2Start, run2End),
-                            StairsRunJustification.Center);
-                        run2.ActualRunWidth = runWidthFt;
-
-                        double run1HeightFt = calcResult.Run1Steps * riserFt;
-                        // 关键：先设顶部标高，再设底部标高
-                        run2.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
-                            .Set(totalHeightFt);
-                        run2.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
-                            .Set(run1HeightFt);
-
-                        doc.Regenerate();
-
-                        // ── 自动生成休息平台 ──
-                        StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
-
-                        tx.Commit();
-                    }
-
-                    scope.Commit(new StairsFailurePreprocessor());
-                }
-
-                // ── 步骤 5：净空合规校验（可选）────────────────────────────
-                if (vm.EnableClearCheck)
-                {
-                    RunClearanceCheck(doc, insertionPt, calcResult,
-                                      riserFt, treadDepthFt, angleRad,
-                                      topLevel.Elevation, vm.CurrentRule.MinClearHeight);
-                }
-
-                // ── 步骤 6：生成完成提示 ────────────────────────────────────
-                Stairs newStairs = doc.GetElement(stairsId) as Stairs;
-                StairsRun finalRun = doc.GetElement(run1Id) as StairsRun;
-
-                TaskDialog.Show("生成完成",
-                    $"楼梯 ID：{newStairs.Id.IntegerValue}\n" +
-                    $"起始标高：{baseLevel.Name}  终止标高：{topLevel.Name}\n" +
-                    $"总踏步数：{newStairs.ActualRiserHeight} 级\n" +
-                    $"踢面高：{FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
-                    $"梯段净宽：{FtToMm(finalRun.ActualRunWidth):F0} mm\n" +
-                    $"方向角 θ = {angleRad * 180 / Math.PI:F1}°");
-
+                // ── 步骤 4：立即返回，控制权交还 Revit ───────────────────────
+                // Execute() 在此结束。窗口由 WPF 自身管理生命周期。
+                // 生成逻辑将在用户点击"生成"后由 ExternalEvent 触发执行。
                 return Result.Succeeded;
-            }
-            catch (Autodesk.Revit.Exceptions.OperationCanceledException)
-            {
-                return Result.Cancelled;
             }
             catch (Exception ex)
             {
@@ -199,44 +83,5 @@ namespace StairsPlugin
                 return Result.Failed;
             }
         }
-
-        // =============================================================
-        //  净空校验（调用 Model 层 ClearanceChecker）
-        // =============================================================
-        private void RunClearanceCheck(
-            Document doc,
-            XYZ insertionPt,
-            StairCalculationResult calcResult,
-            double riserFt,
-            double treadDepthFt,
-            double angleRad,
-            double topLevelElevFt,
-            double minClearHeightMm)
-        {
-            var result = ClearanceChecker.Check(
-                insertionPt,
-                calcResult.TotalSteps,
-                riserFt,
-                treadDepthFt,
-                angleRad,
-                topLevelElevFt,
-                minClearHeightMm);
-
-            if (!result.IsCompliant)
-            {
-                TaskDialog.Show("净空预警",
-                    $"⚠ {result.WarningMessage}\n\n" +
-                    "建议调整层高或踏步参数后重新生成。");
-            }
-        }
-
-        // =============================================================
-        //  单位换算辅助
-        // =============================================================
-        private static double MmToFt(double mm)
-            => UnitUtils.ConvertToInternalUnits(mm, UnitTypeId.Millimeters);
-
-        private static double FtToMm(double ft)
-            => UnitUtils.ConvertFromInternalUnits(ft, UnitTypeId.Millimeters);
     }
 }
