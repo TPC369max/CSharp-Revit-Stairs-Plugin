@@ -71,7 +71,6 @@ namespace StairsPlugin
                 helper.Owner = commandData.Application.MainWindowHandle;
 
                 win.Show(); // 非模态：立即返回，窗口独立存活
-
                 // ── 步骤 4：立即返回，控制权交还 Revit ───────────────────────
                 // Execute() 在此结束。窗口由 WPF 自身管理生命周期。
                 // 生成逻辑将在用户点击"生成"后由 ExternalEvent 触发执行。

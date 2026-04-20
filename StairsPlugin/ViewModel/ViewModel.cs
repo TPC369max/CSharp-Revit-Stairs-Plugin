@@ -128,7 +128,7 @@ namespace StairsPlugin.ViewModel
         }
 
         private XYZ _p2;
-        /// <summary>方向点 P2；Code-behind 拾取后赋值</summary>
+        /// <summary>方向点 P2；Code-behind 拾取后赋值。赋值后触发踏步解算与按钮刷新。</summary>
         public XYZ P2
         {
             get => _p2;
@@ -137,6 +137,8 @@ namespace StairsPlugin.ViewModel
                 SetField(ref _p2, value);
                 OnPropertyChanged(nameof(P2Display));
                 OnPropertyChanged(nameof(ThetaDisplay));
+                // P2 拾取完成 → 进入完整解算流程（Phase 2）
+                Recalculate();
             }
         }
 
@@ -145,7 +147,7 @@ namespace StairsPlugin.ViewModel
             : $"X={ToMm(P1.X):F0}  Y={ToMm(P1.Y):F0} mm";
 
         /// <summary>P2 坐标显示文字（只读，绑定到 TxtCoordP2）</summary>
-        public string P2Display => P2 == null ? "请继续拾取 P2（方向点）"
+        public string P2Display => P2 == null ? "未拾取"
             : $"X={ToMm(P2.X):F0}  Y={ToMm(P2.Y):F0} mm";
 
         /// <summary>方向角显示文字（只读，绑定到 TxtTheta）</summary>
@@ -164,6 +166,8 @@ namespace StairsPlugin.ViewModel
 
         /// <summary>P2 拾取按钮的 IsEnabled（绑定到 BtnPickP2.IsEnabled）</summary>
         public bool CanPickP2 => P1 != null;
+
+        public bool IsPickP2 => P2 != null;
 
         /// <summary>P1→P2 方向角（弧度），生成时传给 Transform.CreateRotation</summary>
         public double DirectionAngleRad => (P1 == null || P2 == null) ? 0.0
@@ -215,20 +219,28 @@ namespace StairsPlugin.ViewModel
         public double LandingDepthMm
         {
             get => _landingDepthMm;
-            set => SetField(ref _landingDepthMm, value);
+            set
+            {
+                if (SetField(ref _landingDepthMm, value))
+                    Recalculate();
+            }
         }
 
         private double _baseOffsetMm = 0;
         public double BaseOffsetMm
         {
             get => _baseOffsetMm;
-            set => SetField(ref _baseOffsetMm, value);
+            set
+            {
+                if (SetField(ref _baseOffsetMm, value))
+                    Recalculate();
+            }
         }
 
         // =============================================================
         //  辅助选项
         // =============================================================
-        private bool _generateRailing = true;
+        private bool _generateRailing = false;
         public bool GenerateRailing
         {
             get => _generateRailing;
@@ -248,7 +260,7 @@ namespace StairsPlugin.ViewModel
             set => SetField(ref _railingTypeIndex, value);
         }
 
-        private bool _enableClearCheck = true;
+        private bool _enableClearCheck = false;
         public bool EnableClearCheck
         {
             get => _enableClearCheck;
@@ -262,8 +274,20 @@ namespace StairsPlugin.ViewModel
 
         public string PreviewSteps => _calcResult == null ? "—" : $"{_calcResult.TotalSteps} 级";
         public string PreviewRiser => _calcResult == null ? "—" : $"{_calcResult.RiserHeight:F1} mm";
-        public string PreviewDist => _calcResult == null ? "—"
-            : $"{_calcResult.Run1Steps} + {_calcResult.Run2Steps} 步";
+        /// <summary>
+        /// 显示两跑的步数分配和水平投影长度。
+        /// 长度 = 步数 × 用户输入的踏步宽（TreadDepthMm），
+        /// 当 TreadDepthMm 变化时此属性会随之刷新，使踏宽输入有实际预览反馈。
+        /// </summary>
+        public string PreviewDist
+        {
+            get
+            {
+                if (_calcResult == null)
+                    return "—";
+                return $"{_calcResult.Run1Steps} + {_calcResult.Run2Steps} 步  ";
+            }
+        }
         public string PreviewRule => _currentRule?.RuleSource ?? "—";
 
         // =============================================================
@@ -291,11 +315,28 @@ namespace StairsPlugin.ViewModel
             }
         }
 
+        private bool _landingDepthOk = true;
+        public bool LandingDepthOk
+        {
+            get => _landingDepthOk;
+            private set
+            {
+                if (SetField(ref _landingDepthOk, value))
+                    OnPropertyChanged(nameof(LandingDepthBadgeText));
+            }
+        }
+
+
         public string RunWidthBadgeText => RunWidthOk
             ? "合规" : $"违规 < {_currentRule?.MinRunWidth} mm";
 
         public string TreadDepthBadgeText => TreadDepthOk
             ? "合规" : $"违规 < {_currentRule?.MinTreadDepth} mm";
+
+        public string LandingDepthBadgeText => LandingDepthOk
+            ? "合规" : $"违规 < {_currentRule?.MinLandingDepth} mm";
+
+        double totalMm = 0;
 
         private bool _hasViolation = false;
         /// <summary>是否存在违规 → 绑定到 PanelWarn.Visibility</summary>
@@ -357,10 +398,10 @@ namespace StairsPlugin.ViewModel
             // 初始化规范（默认住宅）
             _currentRule = StairCodeLibrary.Rules[Model.BuildingType.Residential];
 
-            // 生成命令：CanExecute 要求 P1 已拾取且无违规
+            // 生成命令：CanExecute 要求 P1、P2 均已拾取且无规范违规
             GenerateCommand = new RelayCommand(
                 execute: OnGenerate,
-                canExecute: () => P1 != null && !HasViolation
+                canExecute: ()=> P1 != null && P2 != null && !HasViolation
             );
         }
 
@@ -377,6 +418,7 @@ namespace StairsPlugin.ViewModel
 
             BaseLevelIndex = Levels.Count > 0 ? 0 : -1;
             TopLevelIndex = Levels.Count > 1 ? 1 : -1;
+            LevelInfoRefresh();
         }
 
         public void LoadStairsTypes(IEnumerable<string> names)
@@ -397,18 +439,12 @@ namespace StairsPlugin.ViewModel
             RailingTypeIndex = 0;
         }
 
-        // =============================================================
-        //  私有方法
-        // =============================================================
-
-        /// <summary>
-        /// 核心解算与校验。由标高/建筑类型/几何参数任意属性变化时触发。
-        /// </summary>
-        private void Recalculate()
+        public void LevelInfoRefresh()
         {
             if (_currentRule == null)
                 return;
 
+            // ── Phase 1：标高与几何参数校验（不依赖 P2）─────────────────
             Level baseLv = SelectedBaseLevel;
             Level topLv = SelectedTopLevel;
 
@@ -416,6 +452,9 @@ namespace StairsPlugin.ViewModel
             {
                 TotalHeightDisplay = "— mm";
                 ClearPreview();
+                HasViolation = false;
+                ViolationDetail = "";
+                GenerateCommand.RaiseCanExecuteChanged();
                 return;
             }
 
@@ -432,18 +471,35 @@ namespace StairsPlugin.ViewModel
             }
 
             TotalHeightDisplay = $"总高 {totalMm:F0} mm";
+        }
 
-            // 调用 Model 层踏步解算
-            _calcResult = StairCalculator.Calculate(totalMm, _currentRule);
+        // =============================================================
+        //  私有方法
+        // =============================================================
 
-            OnPropertyChanged(nameof(PreviewSteps));
-            OnPropertyChanged(nameof(PreviewRiser));
-            OnPropertyChanged(nameof(PreviewDist));
-            OnPropertyChanged(nameof(PreviewRule));
+        /// <summary>
+        /// 核心解算与校验，分两阶段执行：
+        ///
+        /// Phase 1（始终执行）：
+        ///   验证标高有效性、更新总高显示、校验梯段净宽和踏步宽度合规性。
+        ///   此阶段不依赖 P2，用户填写几何参数时即可实时看到违规徽章。
+        ///
+        /// Phase 2（仅 P2 已拾取后执行）：
+        ///   调用 StairCalculator 解算踏步数与踢面高，校验踢面高是否超限，
+        ///   更新实时预览区（级数 / 踢面高 / 分配方案）。
+        ///
+        /// 生成按钮 CanExecute = P1 ≠ null ∧ P2 ≠ null ∧ !HasViolation。
+        /// </summary>
+        private void Recalculate()
+        {
+            LevelInfoRefresh();
+            // ── totalMm 加入底部偏移（与 StairGlobalEventHandler 保持一致）─
+            totalMm += BaseOffsetMm;
 
-            // 合规校验
+            // 几何参数合规性（无论 P2 是否拾取，始终实时反馈）
             RunWidthOk = RunWidthMm >= _currentRule.MinRunWidth;
             TreadDepthOk = TreadDepthMm >= _currentRule.MinTreadDepth;
+            LandingDepthOk = (LandingDepthMm >= _currentRule.MinLandingDepth) && (LandingDepthMm >= RunWidthMm);
 
             var violations = new List<string>();
             if (!RunWidthOk)
@@ -452,13 +508,36 @@ namespace StairsPlugin.ViewModel
             if (!TreadDepthOk)
                 violations.Add(
                     $"踏步宽度 {TreadDepthMm} mm 不足，规范要求 ≥ {_currentRule.MinTreadDepth} mm");
-            if (!_calcResult.IsValid)
+            if (!LandingDepthOk)
                 violations.Add(
-                    $"解算踢面高 {_calcResult.RiserHeight:F1} mm 超出规范上限 {_currentRule.MaxRiserHeight} mm");
+                    $"休息平台深度 {LandingDepthMm} mm 不足，规范要求 ≥ {(_currentRule.MinTreadDepth < RunWidthMm ? RunWidthMm:_currentRule.MinTreadDepth)} mm");
 
+            // ── Phase 2：踏步解算（P1、P2 均已拾取后，任何影响计算的参数变化均触发）────
+            if (P1 != null && P2 != null)
+            {
+                _calcResult = StairCalculator.Calculate(totalMm, _currentRule);
+
+                // 通知预览区刷新（PreviewDist 依赖 TreadDepthMm，也在此一并刷新）
+                OnPropertyChanged(nameof(PreviewSteps));
+                OnPropertyChanged(nameof(PreviewRiser));
+                OnPropertyChanged(nameof(PreviewDist));
+                OnPropertyChanged(nameof(PreviewRule));
+
+                // 踢面高超限校验
+                if (!_calcResult.IsValid)
+                    violations.Add(
+                        $"解算踢面高 {_calcResult.RiserHeight:F1} mm 超出规范上限 {_currentRule.MaxRiserHeight} mm");
+            }
+            else
+            {
+                // P1 或 P2 尚未拾取完毕：预览区保持占位符，仅显示几何合规徽章
+                ClearPreview();
+            }
+
+            // ── 汇总违规状态，刷新按钮 ───────────────────────────────────
             HasViolation = violations.Any();
             ViolationDetail = HasViolation
-                ? "规范预警：" + string.Join("；", violations) + "。请修正后再生成。"
+                ? "规范预警：" + string.Join("；", violations) + "。\n请修正后再生成。"
                 : "";
 
             GenerateCommand.RaiseCanExecuteChanged();

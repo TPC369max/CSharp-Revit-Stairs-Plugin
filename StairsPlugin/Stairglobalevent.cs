@@ -94,18 +94,41 @@ namespace StairsPlugin
                         stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH)
                               .Set(treadDepthFt);
 
-                        // ── 局部坐标计算（以 insertionPt 为原点，Y 轴为爬升方向）──
+                        // ── 局部坐标系定义 ────────────────────────────────────────
+                        //   angleRad = Atan2(P2.Y-P1.Y, P2.X-P1.X)，即 P1→P2 与世界 X 轴的夹角。
+                        //   CreateRotation(Z, angleRad) 作用后：
+                        //     局部 X 轴 → 世界 P1→P2 方向   ← 对称轴 / 爬升方向
+                        //     局部 Y 轴 → 世界垂直于 P1→P2  ← 梯段侧向偏移方向
+                        //   原点 = P1（insertionPt）
+                        //
+                        //   两跑中心线到对称轴（局部 X 轴）的 Y 向距离均为：
+                        //     halfY = (梯井宽 + 梯段净宽) / 2
+                        //
+                        //   右旋（顺时针）：站在 P1 朝 P2 看，第一跑在右侧（局部 -Y），
+                        //                   第二跑在左侧（局部 +Y），方向相反（局部 -X 走）。
+                        //   左旋取反。
+                        //
+                        //   验证：P1(0,0) P2(0,6)，angleRad=π/2，右旋，halfY=(well+run)/2
+                        //     局部(-Y) 经旋转 π/2 → 世界 +X  ✓（run1 偏向世界 +X 侧）
+                        //     run1 沿局部 X 从 0→run1Length，旋转后沿世界 Y 爬升 ✓
+
                         double run1Length = (calcResult.Run1Steps - 1) * treadDepthFt;
+                        double run2Length = (calcResult.Run2Steps - 1) * treadDepthFt;
 
-                        // 右旋（顺时针）：第二跑向右偏移；左旋取反
-                        double lateralOffset = clockwise
-                            ? (runWidthFt + wellWidthFt)
-                            : -(runWidthFt + wellWidthFt);
+                        // 每跑中心线到对称轴（局部 X 轴）的 Y 向偏移
+                        double halfY = (wellWidthFt + runWidthFt) / 2.0;
 
-                        XYZ run1LocalStart = new XYZ(0, 0, 0);
-                        XYZ run1LocalEnd = new XYZ(0, run1Length, 0);
-                        XYZ run2LocalStart = new XYZ(lateralOffset, run1Length, 0);
-                        XYZ run2LocalEnd = new XYZ(lateralOffset, 0, 0);
+                        // 右旋：run1 在 -Y 侧（右侧），run2 在 +Y 侧（左侧）；左旋取反
+                        double run1Y = clockwise ? -halfY : halfY;
+                        double run2Y = clockwise ? halfY : -halfY;
+
+                        // 第一跑：沿局部 X 轴从 P1 端爬升至休息平台端
+                        XYZ run1LocalStart = new XYZ(0, run1Y, 0);
+                        XYZ run1LocalEnd = new XYZ(run1Length, run1Y, 0);
+
+                        // 第二跑：End 与run1LocalEnd对齐（）
+                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, 0);
+                        XYZ run2LocalEnd = new XYZ(0, run2Y, 0);
 
                         // ── 应用旋转变换（P1→P2 向量法算出的 angleRad）──
                         var rotate = Transform.CreateRotation(XYZ.BasisZ, angleRad);
@@ -150,7 +173,7 @@ namespace StairsPlugin
                 }
 
                 // ── 净空合规校验（可选）────────────────────────────────────
-                if (vm.EnableClearCheck)
+                if (vm.EnableClearCheck = false)
                 {
                     RunClearanceCheck(insertionPt, calcResult, riserFt, treadDepthFt,
                         angleRad, topLevel.Elevation, vm.CurrentRule.MinClearHeight);
