@@ -360,7 +360,7 @@ namespace StairsPlugin.ViewModel
             get
             {
                 if ((_currentRule == null || LandingDepthMm == RunWidthMm) && LandingDepthOk)
-                    return "默认同梯段净宽";
+                    return "同梯段净宽";
                 double minRequired = Math.Max(_currentRule.MinLandingDepth, RunWidthMm);
                 if (LandingDepthMm >= minRequired)
                     return "合规";
@@ -543,8 +543,8 @@ namespace StairsPlugin.ViewModel
             // 休息平台深度须同时满足：规范最小值 AND 不小于梯段净宽
             double landingMin = Math.Max(_currentRule.MinLandingDepth, RunWidthMm);
             LandingDepthOk = LandingDepthMm >= landingMin;
-            // LandingDepthHint 依赖 LandingDepthMm 和 RunWidthMm，一并刷新
-            //OnPropertyChanged(nameof(LandingDepthHint));
+            // LandingDepthHint 依赖 LandingDepthMm 和 RunWidthMm，强制刷新
+            OnPropertyChanged(nameof(LandingDepthHint));
             OnPropertyChanged(nameof(TotalHeightIsWarning));
             OnPropertyChanged(nameof(RunWidthBadgeText));
             OnPropertyChanged(nameof(TreadDepthBadgeText));
