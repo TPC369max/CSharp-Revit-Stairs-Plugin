@@ -73,8 +73,11 @@ namespace StairsPlugin
                 // P1→P2 距离 = TotalSteps × TreadDepth + LandingDepth
                 double p1p2Mm = FtToMm(vm.P1.DistanceTo(vm.P2));
                 int totalSteps = vm.TreadDepthMm > 0
-                    ? (int)Math.Floor((p1p2Mm - vm.LandingDepthMm) / vm.TreadDepthMm)
+                    ? (int)Math.Floor((p1p2Mm - vm.LandingDepthMm)*2 / vm.TreadDepthMm)
                     : 0;
+                // 双跑楼梯每跑整数级，总步数必须为偶数
+                if (totalSteps % 2 != 0)
+                    totalSteps -= 1;
 
                 if (totalSteps <= 0)
                 {

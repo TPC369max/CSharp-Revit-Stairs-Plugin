@@ -149,7 +149,7 @@
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding TotalHeightIsWarning}" Value="True">
                                         <Setter Property="Background"  Value="{StaticResource WarnOrangeBg}"/>
-                                        <Setter Property="BorderBrush" Value="{StaticResource WarnOrange}"/>                                        
+                                        <Setter Property="BorderBrush" Value="{StaticResource WarnOrange}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -437,30 +437,30 @@
                             BorderThickness="1" CornerRadius="10"
                             Padding="6,1" VerticalAlignment="Center" HorizontalAlignment="Left">
                         <Border.Style>
-                                <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{StaticResource InfoBlueBg}"/>
-                                    <Setter Property="BorderBrush" Value="{StaticResource InfoBlue}"/>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource InfoBlueBg}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource InfoBlue}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding LandingDepthOk}" Value="False">
+                                        <Setter Property="Background"  Value="{StaticResource WarnOrangeBg}"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource WarnOrange}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding LandingDepthHint}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding LandingDepthOk}" Value="False">
-                                            <Setter Property="Background"  Value="{StaticResource WarnOrangeBg}"/>
-                                            <Setter Property="BorderBrush" Value="{StaticResource WarnOrange}"/>
+                                            <Setter Property="Foreground" Value="{StaticResource WarnOrange}"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Border.Style>
-                        <TextBlock Text="{Binding LandingDepthHint}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding LandingDepthOk}" Value="False">
-                                                <Setter Property="Foreground" Value="{StaticResource WarnOrange}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Border>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Border>
                 </Grid>
 
                 <!-- ============================================================ -->
@@ -520,11 +520,11 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="踏步级数" FontSize="10"
                                            Foreground="{StaticResource LabelFg}"/>
-                                <!-- 绑定 PreviewSteps -->
                                 <TextBlock Text="{Binding PreviewSteps}"
                                            FontSize="13" FontWeight="SemiBold"
                                            FontFamily="Consolas"/>
@@ -532,7 +532,6 @@
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="踢面高 h" FontSize="10"
                                            Foreground="{StaticResource LabelFg}"/>
-                                <!-- 绑定 PreviewRiser -->
                                 <TextBlock Text="{Binding PreviewRiser}"
                                            FontSize="13" FontWeight="SemiBold"
                                            FontFamily="Consolas"/>
@@ -540,10 +539,18 @@
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="每跑分配" FontSize="10"
                                            Foreground="{StaticResource LabelFg}"/>
-                                <!-- 绑定 PreviewDist -->
                                 <TextBlock Text="{Binding PreviewDist}"
                                            FontSize="13" FontWeight="SemiBold"
                                            FontFamily="Consolas"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3">
+                                <TextBlock Text="实际踏步宽 b" FontSize="10"
+                                           Foreground="{StaticResource LabelFg}"/>
+                                <!-- 实际踏步宽：由 P1P2 几何反算，与用户输入的期望值分离 -->
+                                <TextBlock Text="{Binding PreviewActualTread}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           FontFamily="Consolas"
+                                           Foreground="{StaticResource InfoBlue}"/>
                             </StackPanel>
                         </Grid>
 

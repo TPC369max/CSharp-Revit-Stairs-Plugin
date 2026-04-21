@@ -303,6 +303,17 @@ namespace StairsPlugin.ViewModel
         }
         public string PreviewRule => _currentRule?.RuleSource ?? "—";
 
+        /// <summary>
+        /// 几何约束反算后的实际踏步宽（只读，显示在预览区）。
+        /// 与用户输入的 TreadDepthMm（期望值）分离，互不干扰。
+        /// </summary>
+        public string PreviewActualTread => _actualTreadDepthMm.HasValue
+            ? $"{_actualTreadDepthMm.Value:F1} mm"
+            : "—";
+
+        private double? _actualTreadDepthMm = null;
+
+
         // =============================================================
         //  合规标志（绑定到 Badge 的 DataTrigger 和 PanelWarn 的 Visibility）
         // =============================================================
@@ -561,15 +572,24 @@ namespace StairsPlugin.ViewModel
                 double p1p2Mm = ToMm(Math.Sqrt(
                     Math.Pow(P2.X - P1.X, 2) + Math.Pow(P2.Y - P1.Y, 2)));
                 int totalSteps = TreadDepthMm > 0
-                    ? (int)Math.Floor((p1p2Mm - LandingDepthMm) / TreadDepthMm)
+                    ? (int)Math.Floor((p1p2Mm - LandingDepthMm)*2 / TreadDepthMm)
                     : 0;
 
-                // 反算精确踏步宽并回写 TextBox（直接写字段，跳过 setter 避免死循环）
-                //if (totalSteps > 0)
-                //{
-                //    _treadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) / totalSteps, 1);
-                //    OnPropertyChanged(nameof(TreadDepthMm));
-                //}
+                // 双跑楼梯每跑整数级，总步数必须为偶数
+                if (totalSteps % 2 != 0)
+                    totalSteps -= 1;
+
+                // 反算实际踏步宽（写入只读预览属性，不回写用户输入框）
+                if (totalSteps > 0)
+                {
+                    _actualTreadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) * 2 / totalSteps, 1);
+                    OnPropertyChanged(nameof(PreviewActualTread));
+                }
+                else
+                {
+                    _actualTreadDepthMm = null;
+                    OnPropertyChanged(nameof(PreviewActualTread));
+                }
 
                 _calcResult = StairCalculator.Calculate(totalMm, totalSteps, _currentRule);
 
@@ -606,10 +626,12 @@ namespace StairsPlugin.ViewModel
         private void ClearPreview()
         {
             _calcResult = null;
+            _actualTreadDepthMm = null;
             OnPropertyChanged(nameof(PreviewSteps));
             OnPropertyChanged(nameof(PreviewRiser));
             OnPropertyChanged(nameof(PreviewDist));
             OnPropertyChanged(nameof(PreviewRule));
+            OnPropertyChanged(nameof(PreviewActualTread));
         }
 
         /// <summary>
