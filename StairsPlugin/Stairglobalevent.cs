@@ -187,8 +187,8 @@ namespace StairsPlugin
                     $"楼梯 ID：{newStairs.Id.IntegerValue}\n" +
                     $"起始标高：{baseLevel.Name}  终止标高：{topLevel.Name}\n" +
                     $"总踏步数：{newStairs.ActualRisersNumber} 级\n" +
-                    $"踢面高：{FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
-                    $"梯段净宽：{FtToMm(finalRun.ActualRunWidth):F0} mm\n" +
+                    $"踢面高：{FtToMm(newStairs.ActualRiserHeight):F1} mm" +
+                    $"梯段净宽：{FtToMm(finalRun.ActualRunWidth):F0} mm" +
                     $"方向角 θ = {angleRad * 180 / Math.PI:F1}°");
             }
             catch (Exception ex)

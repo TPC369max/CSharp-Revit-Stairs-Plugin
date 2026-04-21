@@ -73,8 +73,21 @@ namespace StairsPlugin.ViewModel
         public string TotalHeightDisplay
         {
             get => _totalHeightDisplay;
-            private set => SetField(ref _totalHeightDisplay, value);
+            private set
+            {
+                if (SetField(ref _totalHeightDisplay, value))
+                    OnPropertyChanged(nameof(TotalHeightForeground));
+            }
         }
+
+        /// <summary>
+        /// 总高显示文字的前景色。
+        /// 顶部标高低于底部标高时变红，其余情况使用正常前景色。
+        /// 绑定到 TextBlock.Foreground（需在 XAML 转为 SolidColorBrush）。
+        /// </summary>
+        public string TotalHeightForeground =>
+            _totalHeightDisplay.StartsWith("⚠") ? "#E53935" : "#1565C0";
+
 
         // =============================================================
         //  楼梯族类型
@@ -322,7 +335,7 @@ namespace StairsPlugin.ViewModel
             private set
             {
                 if (SetField(ref _landingDepthOk, value))
-                    OnPropertyChanged(nameof(LandingDepthBadgeText));
+                    OnPropertyChanged(nameof(LandingDepthHint));
             }
         }
 
@@ -333,10 +346,27 @@ namespace StairsPlugin.ViewModel
         public string TreadDepthBadgeText => TreadDepthOk
             ? "合规" : $"违规 < {_currentRule?.MinTreadDepth} mm";
 
-        public string LandingDepthBadgeText => LandingDepthOk
-            ? "合规" : $"违规 < {_currentRule?.MinLandingDepth} mm";
-
         double totalMm = 0;
+
+        /// <summary>
+        /// 平台深度输入框下方的提示文字，共三种状态：
+        ///   1) 规范尚未载入或平台深度为 0：显示 "默认同梯段净宽"
+        ///   2) 平台深度满足下限要求：显示 "-"
+        ///   3) 平台深度不满足下限：显示 "应大于 {下限} mm"
+        /// 下限 = Max(规范 MinLandingDepth, 梯段净宽 RunWidthMm)
+        /// </summary>
+        public string LandingDepthHint
+        {
+            get
+            {
+                if ((_currentRule == null || LandingDepthMm == RunWidthMm) && LandingDepthOk)
+                    return "默认同梯段净宽";
+                double minRequired = Math.Max(_currentRule.MinLandingDepth, RunWidthMm);
+                if (LandingDepthMm >= minRequired)
+                    return "合规";
+                return $"应大于 {minRequired:F0} mm";
+            }
+        }
 
         private bool _hasViolation = false;
         /// <summary>是否存在违规 → 绑定到 PanelWarn.Visibility</summary>
@@ -401,7 +431,7 @@ namespace StairsPlugin.ViewModel
             // 生成命令：CanExecute 要求 P1、P2 均已拾取且无规范违规
             GenerateCommand = new RelayCommand(
                 execute: OnGenerate,
-                canExecute: ()=> P1 != null && P2 != null && !HasViolation
+                canExecute: () => P1 != null && P2 != null && !HasViolation
             );
         }
 
@@ -439,6 +469,18 @@ namespace StairsPlugin.ViewModel
             RailingTypeIndex = 0;
         }
 
+        public bool TotalHeightIsWarning
+        {
+            get
+            {
+                if (totalMm <= 0)
+                    return true;
+                else
+                    return false;
+            }
+
+        }
+
         public void LevelInfoRefresh()
         {
             if (_currentRule == null)
@@ -458,7 +500,7 @@ namespace StairsPlugin.ViewModel
                 return;
             }
 
-            double totalMm = RevitLevelTools.GetHeightDifferenceMm(baseLv, topLv);
+            totalMm = RevitLevelTools.GetHeightDifferenceMm(baseLv, topLv);
 
             if (totalMm <= 0)
             {
@@ -469,7 +511,6 @@ namespace StairsPlugin.ViewModel
                 GenerateCommand.RaiseCanExecuteChanged();
                 return;
             }
-
             TotalHeightDisplay = $"总高 {totalMm:F0} mm";
         }
 
@@ -499,18 +540,15 @@ namespace StairsPlugin.ViewModel
             // 几何参数合规性（无论 P2 是否拾取，始终实时反馈）
             RunWidthOk = RunWidthMm >= _currentRule.MinRunWidth;
             TreadDepthOk = TreadDepthMm >= _currentRule.MinTreadDepth;
-            LandingDepthOk = (LandingDepthMm >= _currentRule.MinLandingDepth) && (LandingDepthMm >= RunWidthMm);
-
+            // 休息平台深度须同时满足：规范最小值 AND 不小于梯段净宽
+            double landingMin = Math.Max(_currentRule.MinLandingDepth, RunWidthMm);
+            LandingDepthOk = LandingDepthMm >= landingMin;
+            // LandingDepthHint 依赖 LandingDepthMm 和 RunWidthMm，一并刷新
+            //OnPropertyChanged(nameof(LandingDepthHint));
+            OnPropertyChanged(nameof(TotalHeightIsWarning));
+            OnPropertyChanged(nameof(RunWidthBadgeText));
+            OnPropertyChanged(nameof(TreadDepthBadgeText));
             var violations = new List<string>();
-            if (!RunWidthOk)
-                violations.Add(
-                    $"梯段净宽 {RunWidthMm} mm 不足，规范要求 ≥ {_currentRule.MinRunWidth} mm");
-            if (!TreadDepthOk)
-                violations.Add(
-                    $"踏步宽度 {TreadDepthMm} mm 不足，规范要求 ≥ {_currentRule.MinTreadDepth} mm");
-            if (!LandingDepthOk)
-                violations.Add(
-                    $"休息平台深度 {LandingDepthMm} mm 不足，规范要求 ≥ {(_currentRule.MinTreadDepth < RunWidthMm ? RunWidthMm:_currentRule.MinTreadDepth)} mm");
 
             // ── Phase 2：踏步解算（P1、P2 均已拾取后，任何影响计算的参数变化均触发）────
             if (P1 != null && P2 != null)
@@ -537,7 +575,7 @@ namespace StairsPlugin.ViewModel
             // ── 汇总违规状态，刷新按钮 ───────────────────────────────────
             HasViolation = violations.Any();
             ViolationDetail = HasViolation
-                ? "规范预警：" + string.Join("；", violations) + "。\n请修正后再生成。"
+                ? "规范预警：\n" + string.Join("；\n", violations) + "。\n请修正后再生成。"
                 : "";
 
             GenerateCommand.RaiseCanExecuteChanged();

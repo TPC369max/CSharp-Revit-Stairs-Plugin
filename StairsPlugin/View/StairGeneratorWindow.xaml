@@ -139,13 +139,33 @@
                                ItemsSource="{Binding LevelDisplayNames}"
                                SelectedIndex="{Binding TopLevelIndex, Mode=TwoWay}"/>
                     <!-- 总高：绑定 TotalHeightDisplay -->
-                    <Border Grid.Column="2" Margin="8,0,0,0"
-                            Background="{StaticResource InfoBlueBg}"
-                            BorderBrush="{StaticResource InfoBlue}"
+                    <Border Grid.Column="2" Margin="8,5,0,0"
                             BorderThickness="1" CornerRadius="10"
-                            Padding="8,1" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding TotalHeightDisplay}" FontSize="11"
-                                   Foreground="{StaticResource InfoBlue}"/>
+                            Padding="8,1" VerticalAlignment="Top">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{StaticResource InfoBlueBg}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource InfoBlue}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding TotalHeightIsWarning}" Value="True">
+                                        <Setter Property="Background"  Value="{StaticResource WarnOrangeBg}"/>
+                                        <Setter Property="BorderBrush" Value="{StaticResource WarnOrange}"/>                                        
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding TotalHeightDisplay}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TotalHeightIsWarning}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource WarnOrange}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Border>
                 </Grid>
 
@@ -414,13 +434,33 @@
                     <TextBlock Grid.Column="2" Text="mm" FontSize="12" Margin="6,0,8,0"
                                Foreground="{StaticResource UnitFg}" VerticalAlignment="Center"/>
                     <Border Grid.Column="3"
-                            Background="{StaticResource InfoBlueBg}"
-                            BorderBrush="{StaticResource InfoBlue}"
                             BorderThickness="1" CornerRadius="10"
                             Padding="6,1" VerticalAlignment="Center" HorizontalAlignment="Left">
-                        <TextBlock Text="默认同梯段净宽" FontSize="10"
-                                   Foreground="{StaticResource InfoBlue}"/>
-                    </Border>
+                        <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{StaticResource InfoBlueBg}"/>
+                                    <Setter Property="BorderBrush" Value="{StaticResource InfoBlue}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding LandingDepthOk}" Value="False">
+                                            <Setter Property="Background"  Value="{StaticResource WarnOrangeBg}"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource WarnOrange}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                        <TextBlock Text="{Binding LandingDepthHint}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LandingDepthOk}" Value="False">
+                                                <Setter Property="Foreground" Value="{StaticResource WarnOrange}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Border>
                 </Grid>
 
                 <!-- ============================================================ -->
