@@ -207,6 +207,7 @@ namespace StairsPlugin.ViewModel
             {
                 if (SetField(ref _runWidthMm, value))
                     Recalculate();
+                OnPropertyChanged(LandingDepthHint);
             }
         }
 
@@ -573,7 +574,11 @@ namespace StairsPlugin.ViewModel
             }
 
             // ── 汇总违规状态，刷新按钮 ───────────────────────────────────
-            HasViolation = violations.Any();
+            HasViolation = violations.Any()
+                          || !RunWidthOk
+                          || !TreadDepthOk
+                          || !LandingDepthOk
+                          || TotalHeightIsWarning;
             ViolationDetail = HasViolation
                 ? "规范预警：\n" + string.Join("；\n", violations) + "。\n请修正后再生成。"
                 : "";
