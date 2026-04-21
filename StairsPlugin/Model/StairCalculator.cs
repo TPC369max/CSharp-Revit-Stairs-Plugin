@@ -32,6 +32,29 @@ namespace StairsPlugin.Model
 
     public static class StairCalculator
     {
+        // StairCalculator.cs 新增重载
+        public static StairCalculationResult Calculate(
+            double totalHeightMm, int totalSteps, StairCodeParams rule)
+        {
+            if (totalSteps <= 0)
+                return new StairCalculationResult { IsValid = false };
+
+            double riserHeight = totalHeightMm / totalSteps;
+            int run1 = (totalSteps % 2 == 0)
+                ? totalSteps / 2
+                : (totalSteps + 1) / 2;   // 奇数时第一跑多一步（行业惯例）
+            int run2 = totalSteps - run1;
+
+            return new StairCalculationResult
+            {
+                TotalSteps = totalSteps,
+                RiserHeight = riserHeight,
+                Run1Steps = run1,
+                Run2Steps = run2,
+                IsValid = riserHeight <= rule.MaxRiserHeight
+            };
+        }
+
         public static StairCalculationResult Calculate(double totalHeightMm, StairCodeParams rule)
         {
             if(rule == null&&totalHeightMm<=0) 

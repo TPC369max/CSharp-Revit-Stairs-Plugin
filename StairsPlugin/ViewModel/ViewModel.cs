@@ -554,7 +554,17 @@ namespace StairsPlugin.ViewModel
             bool hasGeometryViolation = !RunWidthOk || !TreadDepthOk || !LandingDepthOk || TotalHeightIsWarning;
             if (P1 != null && P2 != null)
             {
-                _calcResult = StairCalculator.Calculate(totalMm, _currentRule);
+                // ── 由水平约束推导踏步级数 ───────────────────────────────────
+                // P1→P2 距离 = 楼梯水平投影矩形的一条边（固定值）
+                // TotalSteps × TreadDepthMm + LandingDepthMm = P1P2距离
+                // → TotalSteps = Floor((P1P2距离 - LandingDepthMm) / TreadDepthMm)
+                double p1p2Mm = ToMm(Math.Sqrt(
+                    Math.Pow(P2.X - P1.X, 2) + Math.Pow(P2.Y - P1.Y, 2)));
+                int totalSteps = TreadDepthMm > 0
+                    ? (int)Math.Floor((p1p2Mm - LandingDepthMm) / TreadDepthMm)
+                    : 0;
+
+                _calcResult = StairCalculator.Calculate(totalMm, totalSteps, _currentRule);
 
                 // 仅在无几何违规时刷新预览区，避免显示无意义的解算结果
                 if (!hasGeometryViolation)

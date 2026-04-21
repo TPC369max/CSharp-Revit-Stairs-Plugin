@@ -56,6 +56,8 @@ namespace StairsPlugin.Model
                 WarningMessage = ok ? null
                     : $"净空不足！最小净空 {minClearMm:F0} mm，规范要求 ≥ {minClearHeightMm} mm"
             };
+
+
         }
 
     }
