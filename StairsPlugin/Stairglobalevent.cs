@@ -67,11 +67,23 @@ namespace StairsPlugin
                 double baseOffsetFt = MmToFt(vm.BaseOffsetMm);
 
                 double totalHeightFt = topLevel.Elevation - baseLevel.Elevation + baseOffsetFt;
+                double totalHeightMm = FtToMm(totalHeightFt);
 
-                // 踏步解算（使用 ViewModel 缓存的当前规范）
-                var calcResult = StairCalculator.Calculate(
-                    FtToMm(totalHeightFt),
-                    vm.CurrentRule);
+                // ── 由水平约束推导踏步级数（与 ViewModel.Recalculate 保持一致）──
+                // P1→P2 距离 = TotalSteps × TreadDepth + LandingDepth
+                double p1p2Mm = FtToMm(vm.P1.DistanceTo(vm.P2));
+                int totalSteps = vm.TreadDepthMm > 0
+                    ? (int)Math.Floor((p1p2Mm - vm.LandingDepthMm) / vm.TreadDepthMm)
+                    : 0;
+
+                if (totalSteps <= 0)
+                {
+                    TaskDialog.Show("错误", "踏步级数解算为零，请检查 P1P2 距离与踏步宽设置。");
+                    return;
+                }
+
+                // 踏步解算：级数由水平约束固定，踢面高由垂直高度推导
+                var calcResult = StairCalculator.Calculate(totalHeightMm, totalSteps, vm.CurrentRule);
 
                 double riserFt = MmToFt(calcResult.RiserHeight);
 
@@ -173,7 +185,7 @@ namespace StairsPlugin
                 }
 
                 // ── 净空合规校验（可选）────────────────────────────────────
-                if (vm.EnableClearCheck = false)
+                if (vm.EnableClearCheck == true)
                 {
                     RunClearanceCheck(insertionPt, calcResult, riserFt, treadDepthFt,
                         angleRad, topLevel.Elevation, vm.CurrentRule.MinClearHeight);
