@@ -207,7 +207,6 @@ namespace StairsPlugin.ViewModel
             {
                 if (SetField(ref _runWidthMm, value))
                     Recalculate();
-                OnPropertyChanged(LandingDepthHint);
             }
         }
 
@@ -552,15 +551,19 @@ namespace StairsPlugin.ViewModel
             var violations = new List<string>();
 
             // ── Phase 2：踏步解算（P1、P2 均已拾取后，任何影响计算的参数变化均触发）────
+            bool hasGeometryViolation = !RunWidthOk || !TreadDepthOk || !LandingDepthOk || TotalHeightIsWarning;
             if (P1 != null && P2 != null)
             {
                 _calcResult = StairCalculator.Calculate(totalMm, _currentRule);
 
-                // 通知预览区刷新（PreviewDist 依赖 TreadDepthMm，也在此一并刷新）
-                OnPropertyChanged(nameof(PreviewSteps));
-                OnPropertyChanged(nameof(PreviewRiser));
-                OnPropertyChanged(nameof(PreviewDist));
-                OnPropertyChanged(nameof(PreviewRule));
+                // 仅在无几何违规时刷新预览区，避免显示无意义的解算结果
+                if (!hasGeometryViolation)
+                {
+                    OnPropertyChanged(nameof(PreviewSteps));
+                    OnPropertyChanged(nameof(PreviewRiser));
+                    OnPropertyChanged(nameof(PreviewDist));
+                    OnPropertyChanged(nameof(PreviewRule));
+                }
 
                 // 踢面高超限校验
                 if (!_calcResult.IsValid)
