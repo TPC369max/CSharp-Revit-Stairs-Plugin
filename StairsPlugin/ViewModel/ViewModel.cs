@@ -311,11 +311,12 @@ namespace StairsPlugin.ViewModel
             ? $"{_actualTreadDepthMm.Value:F1} mm"
             : "—";
 
-        private double? _actualTreadDepthMm = 0;
+        private double? _actualTreadDepthMm = null;
         public double? ActualTreadDepthMm
         {
             get => _actualTreadDepthMm;
         }
+
 
         // =============================================================
         //  合规标志（绑定到 Badge 的 DataTrigger 和 PanelWarn 的 Visibility）
@@ -381,6 +382,51 @@ namespace StairsPlugin.ViewModel
                 return $"应大于 {minRequired:F0} mm";
             }
         }
+
+        // ── Phase-2 合规标志（依赖 P1/P2 解算结果）──────────────────────
+
+        private bool _totalStepsOk = true;
+        /// <summary>总踏步级数是否在规范范围内（4 ≤ N ≤ 36）</summary>
+        public bool TotalStepsOk
+        {
+            get => _totalStepsOk;
+            private set
+            {
+                if (SetField(ref _totalStepsOk, value))
+                    OnPropertyChanged(nameof(TotalStepsBadgeText));
+            }
+        }
+        public string TotalStepsBadgeText => TotalStepsOk
+            ? "合规" : "违规：级数须在 4 ~ 36 级之间";
+
+        private bool _actualTreadOk = true;
+        /// <summary>实际踏步宽是否满足规范下限</summary>
+        public bool ActualTreadOk
+        {
+            get => _actualTreadOk;
+            private set
+            {
+                if (SetField(ref _actualTreadOk, value))
+                    OnPropertyChanged(nameof(ActualTreadBadgeText));
+            }
+        }
+        public string ActualTreadBadgeText => ActualTreadOk
+            ? "合规" : $"违规 < {_currentRule?.MinTreadDepth} mm";
+
+        private bool _riserHeightOk = true;
+        /// <summary>踢面高是否在规范范围内（MinRiserHeight ≤ h ≤ MaxRiserHeight）</summary>
+        public bool RiserHeightOk
+        {
+            get => _riserHeightOk;
+            private set
+            {
+                if (SetField(ref _riserHeightOk, value))
+                    OnPropertyChanged(nameof(RiserHeightBadgeText));
+            }
+        }
+        public string RiserHeightBadgeText => RiserHeightOk
+            ? "合规"
+            : $"违规：踢面高须小于 {_currentRule?.MaxRiserHeight} mm ";
 
         private bool _hasViolation = false;
         /// <summary>是否存在违规 → 绑定到 PanelWarn.Visibility</summary>
@@ -598,7 +644,7 @@ namespace StairsPlugin.ViewModel
                 // 反算实际踏步宽（写入只读预览属性，不回写用户输入框）
                 if (totalSteps > 0)
                 {
-                    _actualTreadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) * 2 / (totalSteps-2), 1);
+                    _actualTreadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) * 2 / (totalSteps - 2), 1);
                     OnPropertyChanged(nameof(PreviewActualTread));
                 }
                 else
@@ -614,11 +660,28 @@ namespace StairsPlugin.ViewModel
                 OnPropertyChanged(nameof(PreviewDist));
                 OnPropertyChanged(nameof(PreviewRule));
 
+                // ── 三项 Phase-2 规范校验 ────────────────────────────────
 
-                // 踢面高超限校验
-                if (!_calcResult.IsValid)
+                // ① 踏步级数：4 ≤ totalSteps ≤ 36
+                TotalStepsOk = totalSteps >= 4 && totalSteps <= 36;
+                if (!TotalStepsOk)
                     violations.Add(
-                        $"解算踢面高 {_calcResult.RiserHeight:F1} mm 超出规范上限 {_currentRule.MaxRiserHeight} mm");
+                        $"总踏步级数 {totalSteps} 级不在规范范围（4 ~ 36 级）内");
+
+                // ② 实际踏步宽（几何反算值）须满足规范下限
+                ActualTreadOk = _actualTreadDepthMm.HasValue
+                    && _actualTreadDepthMm.Value >= _currentRule.MinTreadDepth;
+                if (!ActualTreadOk)
+                    violations.Add(
+                        $"实际踏步宽 {(_actualTreadDepthMm.HasValue ? $"{_actualTreadDepthMm.Value:F1}" : "—")} mm"
+                        + $" 低于规范下限 {_currentRule.MinTreadDepth} mm");
+
+                // ③ 踢面高：MinRiserHeight ≤ h ≤ MaxRiserHeight
+                RiserHeightOk = _calcResult.RiserHeight <= _currentRule.MaxRiserHeight;
+                if (!RiserHeightOk)
+                    violations.Add(
+                        $"解算踢面高 {_calcResult.RiserHeight:F1} mm 大于"
+                        + $"（{_currentRule.MaxRiserHeight} mm）内");
             }
             else
             {
@@ -631,6 +694,9 @@ namespace StairsPlugin.ViewModel
                           || !RunWidthOk
                           || !TreadDepthOk
                           || !LandingDepthOk
+                          || !TotalStepsOk
+                          || !ActualTreadOk
+                          || !RiserHeightOk
                           || TotalHeightIsWarning;
             ViolationDetail = HasViolation
                 ? "规范预警：\n" + string.Join("；\n", violations) + "。\n请修正后再生成。"
@@ -643,6 +709,10 @@ namespace StairsPlugin.ViewModel
         {
             _calcResult = null;
             _actualTreadDepthMm = null;
+            // Phase-2 标志重置：P1/P2 未就绪时不应残留上次校验结果
+            TotalStepsOk = true;
+            ActualTreadOk = true;
+            RiserHeightOk = true;
             OnPropertyChanged(nameof(PreviewSteps));
             OnPropertyChanged(nameof(PreviewRiser));
             OnPropertyChanged(nameof(PreviewDist));
