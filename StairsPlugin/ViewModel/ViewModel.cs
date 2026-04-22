@@ -637,6 +637,19 @@ namespace StairsPlugin.ViewModel
                     ? (int)Math.Floor((p1p2Mm - LandingDepthMm) * 2 / TreadDepthMm)
                     : 0;
 
+                // P1P2 距离必须大于休息平台深度，否则扣除平台后无空间容纳任何踏步
+                if (p1p2Mm <= LandingDepthMm)
+                {
+                    violations.Add(
+                        $"P1P2 距离 {p1p2Mm:F0} mm 须大于休息平台深度 {LandingDepthMm:F0} mm");
+                    ClearPreview();
+                    // 跳过后续解算，直接进入违规汇总
+                    HasViolation = true;
+                    ViolationDetail = "规范预警：\n" + string.Join("；\n", violations) + "。\n请修正后再生成。";
+                    GenerateCommand.RaiseCanExecuteChanged();
+                    return;
+                }
+
                 // 双跑楼梯每跑整数级，总步数必须为偶数
                 if (totalSteps % 2 != 0)
                     totalSteps -= 1;
