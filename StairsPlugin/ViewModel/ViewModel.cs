@@ -311,8 +311,11 @@ namespace StairsPlugin.ViewModel
             ? $"{_actualTreadDepthMm.Value:F1} mm"
             : "—";
 
-        private double? _actualTreadDepthMm = null;
-
+        private double? _actualTreadDepthMm = 0;
+        public double? ActualTreadDepthMm
+        {
+            get => _actualTreadDepthMm;
+        }
 
         // =============================================================
         //  合规标志（绑定到 Badge 的 DataTrigger 和 PanelWarn 的 Visibility）
@@ -424,6 +427,19 @@ namespace StairsPlugin.ViewModel
                 ? StairsTypeNames[StairsTypeIndex] : "";
 
         public StairCodeParams CurrentRule => _currentRule;
+
+        /// <summary>
+        /// Recalculate() 解算后的踏步结果快照。
+        /// StairGlobalEventHandler 直接读取，避免重复推导。
+        /// P1/P2 尚未拾取或几何违规时为 null。
+        /// </summary>
+        public StairCalculationResult CalcResult => _calcResult;
+
+        /// <summary>
+        /// 含底部偏移的总高度（mm），与 Recalculate() 内部 totalMm 保持一致。
+        /// StairGlobalEventHandler 读取后换算为 Revit 内部单位（英尺）。
+        /// </summary>
+        public double TotalHeightMm => totalMm;
 
         // =============================================================
         //  构造函数
@@ -572,7 +588,7 @@ namespace StairsPlugin.ViewModel
                 double p1p2Mm = ToMm(Math.Sqrt(
                     Math.Pow(P2.X - P1.X, 2) + Math.Pow(P2.Y - P1.Y, 2)));
                 int totalSteps = TreadDepthMm > 0
-                    ? (int)Math.Floor((p1p2Mm - LandingDepthMm)*2 / TreadDepthMm)
+                    ? (int)Math.Floor((p1p2Mm - LandingDepthMm) * 2 / TreadDepthMm)
                     : 0;
 
                 // 双跑楼梯每跑整数级，总步数必须为偶数
@@ -582,7 +598,7 @@ namespace StairsPlugin.ViewModel
                 // 反算实际踏步宽（写入只读预览属性，不回写用户输入框）
                 if (totalSteps > 0)
                 {
-                    _actualTreadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) * 2 / totalSteps, 1);
+                    _actualTreadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) * 2 / (totalSteps-2), 1);
                     OnPropertyChanged(nameof(PreviewActualTread));
                 }
                 else
@@ -593,10 +609,10 @@ namespace StairsPlugin.ViewModel
 
                 _calcResult = StairCalculator.Calculate(totalMm, totalSteps, _currentRule);
 
-                    OnPropertyChanged(nameof(PreviewSteps));
-                    OnPropertyChanged(nameof(PreviewRiser));
-                    OnPropertyChanged(nameof(PreviewDist));
-                    OnPropertyChanged(nameof(PreviewRule));
+                OnPropertyChanged(nameof(PreviewSteps));
+                OnPropertyChanged(nameof(PreviewRiser));
+                OnPropertyChanged(nameof(PreviewDist));
+                OnPropertyChanged(nameof(PreviewRule));
 
 
                 // 踢面高超限校验

@@ -62,31 +62,21 @@ namespace StairsPlugin
                 bool clockwise = vm.IsClockwise;
 
                 double runWidthFt = MmToFt(vm.RunWidthMm);
-                double treadDepthFt = MmToFt(vm.TreadDepthMm);
+                double treadDepthFt = MmToFt((double)vm.ActualTreadDepthMm);
                 double wellWidthFt = MmToFt(vm.WellWidthMm);
-                double baseOffsetFt = MmToFt(vm.BaseOffsetMm);
 
-                double totalHeightFt = topLevel.Elevation - baseLevel.Elevation + baseOffsetFt;
-                double totalHeightMm = FtToMm(totalHeightFt);
-
-                // ── 由水平约束推导踏步级数（与 ViewModel.Recalculate 保持一致）──
-                // P1→P2 距离 = TotalSteps × TreadDepth + LandingDepth
-                double p1p2Mm = FtToMm(vm.P1.DistanceTo(vm.P2));
-                int totalSteps = vm.TreadDepthMm > 0
-                    ? (int)Math.Floor((p1p2Mm - vm.LandingDepthMm)*2 / vm.TreadDepthMm)
-                    : 0;
-                // 双跑楼梯每跑整数级，总步数必须为偶数
-                if (totalSteps % 2 != 0)
-                    totalSteps -= 1;
-
-                if (totalSteps <= 0)
+                // ── 直接读取 ViewModel 已解算的结果，避免重复推导 ──────────
+                // Recalculate() 在用户每次修改参数后均已执行并缓存至 CalcResult；
+                // Handler 只需在 Revit 上下文中使用该快照，无需再推导一次。
+                var calcResult = vm.CalcResult;
+                if (calcResult == null || calcResult.TotalSteps <= 0)
                 {
                     TaskDialog.Show("错误", "踏步级数解算为零，请检查 P1P2 距离与踏步宽设置。");
                     return;
                 }
 
-                // 踏步解算：级数由水平约束固定，踢面高由垂直高度推导
-                var calcResult = StairCalculator.Calculate(totalHeightMm, totalSteps, vm.CurrentRule);
+                // TotalHeightMm 已含底部偏移，与 Recalculate() 内部 totalMm 一致
+                double totalHeightFt = MmToFt(vm.TotalHeightMm);
 
                 double riserFt = MmToFt(calcResult.RiserHeight);
 
@@ -127,8 +117,8 @@ namespace StairsPlugin
                         //     局部(-Y) 经旋转 π/2 → 世界 +X  ✓（run1 偏向世界 +X 侧）
                         //     run1 沿局部 X 从 0→run1Length，旋转后沿世界 Y 爬升 ✓
 
-                        double run1Length = (calcResult.Run1Steps - 1) * treadDepthFt;
-                        double run2Length = (calcResult.Run2Steps - 1) * treadDepthFt;
+                        double run1Length = (calcResult.Run1Steps-1) * treadDepthFt;
+                        double run2Length = (calcResult.Run2Steps-1 ) * treadDepthFt;
 
                         // 每跑中心线到对称轴（局部 X 轴）的 Y 向偏移
                         double halfY = (wellWidthFt + runWidthFt) / 2.0;
