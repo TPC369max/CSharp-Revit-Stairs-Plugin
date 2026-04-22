@@ -573,14 +573,12 @@ namespace StairsPlugin.ViewModel
                 return;
             }
 
-            totalMm = RevitLevelTools.GetHeightDifferenceMm(baseLv, topLv);
+            totalMm = RevitLevelTools.GetHeightDifferenceMm(baseLv, topLv, BaseOffsetMm);
 
             if (totalMm <= 0)
             {
                 TotalHeightDisplay = "⚠ 顶部标高须高于底部标高";
                 ClearPreview();
-                HasViolation = true;
-                ViolationDetail = "顶部标高不得低于底部标高。";
                 GenerateCommand.RaiseCanExecuteChanged();
                 return;
             }
@@ -607,8 +605,7 @@ namespace StairsPlugin.ViewModel
         private void Recalculate()
         {
             LevelInfoRefresh();
-            // ── totalMm 加入底部偏移（与 StairGlobalEventHandler 保持一致）─
-            totalMm += BaseOffsetMm;
+
 
             // 几何参数合规性（无论 P2 是否拾取，始终实时反馈）
             RunWidthOk = RunWidthMm >= _currentRule.MinRunWidth;
@@ -709,8 +706,7 @@ namespace StairsPlugin.ViewModel
                           || !LandingDepthOk
                           || !TotalStepsOk
                           || !ActualTreadOk
-                          || !RiserHeightOk
-                          || TotalHeightIsWarning;
+                          || !RiserHeightOk;
             ViolationDetail = HasViolation
                 ? "规范预警：\n" + string.Join("；\n", violations) + "。\n请修正后再生成。"
                 : "";

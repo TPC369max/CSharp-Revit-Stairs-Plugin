@@ -44,9 +44,11 @@ namespace StairsPlugin
             return $"{level.Name}  {sign}{elevMm:F0} mm";
         }
 
-        public static double GetHeightDifferenceMm(Level baseLevel, Level topLevel)
+        public static double GetHeightDifferenceMm(Level baseLevel, Level topLevel,double BaseOffset)
         {
-            double diffFt = topLevel.Elevation - baseLevel.Elevation;
+            double BaseOffsetFt = UnitUtils.ConvertToInternalUnits(
+                BaseOffset, UnitTypeId.Millimeters);
+            double diffFt = topLevel.Elevation - baseLevel.Elevation- BaseOffsetFt;
             return UnitUtils.ConvertFromInternalUnits(diffFt, UnitTypeId.Millimeters);
         }
     }

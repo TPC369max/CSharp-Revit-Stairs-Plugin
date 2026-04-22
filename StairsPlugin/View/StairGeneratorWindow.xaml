@@ -527,14 +527,36 @@
                                            Foreground="{StaticResource LabelFg}"/>
                                 <TextBlock Text="{Binding PreviewSteps}"
                                            FontSize="13" FontWeight="SemiBold"
-                                           FontFamily="Consolas"/>
+                                           FontFamily="Consolas">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding TotalStepsOk}" Value="False">
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerRed}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="踢面高 h" FontSize="10"
                                            Foreground="{StaticResource LabelFg}"/>
                                 <TextBlock Text="{Binding PreviewRiser}"
                                            FontSize="13" FontWeight="SemiBold"
-                                           FontFamily="Consolas"/>
+                                           FontFamily="Consolas">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding RiserHeightOk}" Value="False">
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerRed}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="每跑分配" FontSize="10"
@@ -549,8 +571,18 @@
                                 <!-- 实际踏步宽：由 P1P2 几何反算，与用户输入的期望值分离 -->
                                 <TextBlock Text="{Binding PreviewActualTread}"
                                            FontSize="13" FontWeight="SemiBold"
-                                           FontFamily="Consolas"
-                                           Foreground="{StaticResource InfoBlue}"/>
+                                           FontFamily="Consolas">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource InfoBlue}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ActualTreadOk}" Value="False">
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerRed}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
 
