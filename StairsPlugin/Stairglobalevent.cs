@@ -4,6 +4,7 @@ using Autodesk.Revit.UI;
 using StairsPlugin.Model;
 using StairsPlugin.ViewModel;
 using System;
+using System.Linq;
 
 namespace StairsPlugin
 {
@@ -176,6 +177,44 @@ namespace StairsPlugin
 
                     scope.Commit(new StairsFailurePreprocessor());
                 }
+
+                // ── 栏杆处理（必须在 StairsEditScope 关闭后执行）──────────
+                // scope.Commit() 之后 Revit 才正式生成关联栏杆，
+                // 此时通过 GetAssociatedRailings() 可枚举到全部扶手 ID。
+                using (var txRailing = new Transaction(doc, "处理栏杆扶手"))
+                {
+                    txRailing.Start();
+
+                    Stairs stairsForRailing = doc.GetElement(stairsId) as Stairs;
+                    var railingIds = stairsForRailing.GetAssociatedRailings();
+
+                    if (!vm.GenerateRailing)
+                    {
+                        // 不生成扶手：删除 Revit 自动创建的全部关联栏杆
+                        foreach (ElementId rid in railingIds)
+                            doc.Delete(rid);
+                    }
+                    else
+                    {
+                        // 生成扶手：尝试将自动栏杆换成用户选定的类型
+                        string targetName = vm.SelectedRailingTypeName;
+                        ElementType targetType = new FilteredElementCollector(doc)
+                            .OfClass(typeof(ElementType))
+                            .Where(e => e.GetType().Name == "RailingType"
+                                     && e.Name == targetName)
+                            .FirstOrDefault() as ElementType;
+
+                        if (targetType != null)
+                        {
+                            foreach (ElementId rid in railingIds)
+                                doc.GetElement(rid).ChangeTypeId(targetType.Id);
+                        }
+                        // targetType == null 时保留 Revit 默认类型，不报错
+                    }
+
+                    txRailing.Commit();
+                }
+
 
                 // ── 净空合规校验（可选）────────────────────────────────────
                 if (vm.EnableClearCheck == true)

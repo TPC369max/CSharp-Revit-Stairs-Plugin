@@ -266,6 +266,11 @@ namespace StairsPlugin.ViewModel
         }
             = new ObservableCollection<string>();
 
+        public string SelectedRailingTypeName =>
+    (RailingTypeIndex >= 0 && RailingTypeIndex < RailingTypeNames.Count)
+        ? RailingTypeNames[RailingTypeIndex] : "";
+
+
         private int _railingTypeIndex = 0;
         public int RailingTypeIndex
         {
@@ -487,6 +492,8 @@ namespace StairsPlugin.ViewModel
         /// </summary>
         public double TotalHeightMm => totalMm;
 
+        bool hasGeometryViolation;
+
         // =============================================================
         //  构造函数
         //  ★ 接收 ExternalEvent + Handler（非模态架构必须）
@@ -504,7 +511,7 @@ namespace StairsPlugin.ViewModel
             // 生成命令：CanExecute 要求 P1、P2 均已拾取且无规范违规
             GenerateCommand = new RelayCommand(
                 execute: OnGenerate,
-                canExecute: () => P1 != null && P2 != null && !HasViolation
+                canExecute: () => P1 != null && P2 != null && !HasViolation&& !hasGeometryViolation
             );
         }
 
@@ -621,7 +628,8 @@ namespace StairsPlugin.ViewModel
             var violations = new List<string>();
 
             // ── Phase 2：踏步解算（P1、P2 均已拾取后，任何影响计算的参数变化均触发）────
-            bool hasGeometryViolation = !RunWidthOk || !TreadDepthOk || !LandingDepthOk || TotalHeightIsWarning;
+            hasGeometryViolation = !RunWidthOk || !TreadDepthOk || !LandingDepthOk || TotalHeightIsWarning;
+
             if (P1 != null && P2 != null && !hasGeometryViolation)
             {
                 // ── 由水平约束推导踏步级数 ───────────────────────────────────
@@ -701,9 +709,6 @@ namespace StairsPlugin.ViewModel
 
             // ── 汇总违规状态，刷新按钮 ───────────────────────────────────
             HasViolation = violations.Any()
-                          || !RunWidthOk
-                          || !TreadDepthOk
-                          || !LandingDepthOk
                           || !TotalStepsOk
                           || !ActualTreadOk
                           || !RiserHeightOk;
