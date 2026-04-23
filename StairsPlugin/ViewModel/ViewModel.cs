@@ -662,7 +662,7 @@ namespace StairsPlugin.ViewModel
                 // 反算实际踏步宽（写入只读预览属性，不回写用户输入框）
                 if (totalSteps > 0)
                 {
-                    _actualTreadDepthMm = Math.Round((p1p2Mm - LandingDepthMm) * 2 / (totalSteps - 2), 1);
+                    _actualTreadDepthMm = (p1p2Mm - LandingDepthMm) * 2 / (totalSteps - 2);
                     OnPropertyChanged(nameof(PreviewActualTread));
                 }
                 else

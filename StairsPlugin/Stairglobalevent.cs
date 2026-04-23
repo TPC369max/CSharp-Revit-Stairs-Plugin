@@ -65,6 +65,16 @@ namespace StairsPlugin
                 double angleRad = vm.DirectionAngleRad;
                 bool clockwise = vm.IsClockwise;
 
+                // ── 应用旋转 + 平移变换 ───────────────────────────────────
+                // P1 在平面视图中拾取，其 Z 值取决于视图高程，不可直接使用。
+                // 以底部标高绝对高程 + 底部偏移作为正确的 Z 原点，
+                // 保证梯段起点严格落在用户指定的楼层面上。
+                double baseOffsetFt = MmToFt(vm.BaseOffsetMm);
+                XYZ insertionPtCorrected = new XYZ(
+                    insertionPt.X,
+                    insertionPt.Y,
+                    baseLevel.Elevation + baseOffsetFt);   // 绝对高程（英尺）
+
                 double runWidthFt = MmToFt(vm.RunWidthMm);
                 double treadDepthFt = MmToFt((double)vm.ActualTreadDepthMm);
                 double wellWidthFt = MmToFt(vm.WellWidthMm);
@@ -77,7 +87,6 @@ namespace StairsPlugin
                     return;
                 }
 
-                double totalHeightFt = MmToFt(vm.TotalHeightMm);
                 double riserFt = MmToFt(calcResult.RiserHeight);
 
                 // ════════════════════════════════════════════════════════
@@ -101,7 +110,7 @@ namespace StairsPlugin
                     var clearResult = ClearanceChecker.Check(
                         doc: view3D != null ? doc : null,
                         view3D: view3D,
-                        insertionPoint: insertionPt,
+                        insertionPoint: insertionPtCorrected,
                         calcResult: calcResult,
                         riserHeightFt: riserFt,
                         treadDepthFt: treadDepthFt,
@@ -186,14 +195,16 @@ namespace StairsPlugin
                         double run1Y = clockwise ? -halfY : halfY;
                         double run2Y = clockwise ? halfY : -halfY;
 
+                        double run1HeightFt = calcResult.Run1Steps * riserFt;
                         XYZ run1LocalStart = new XYZ(0, run1Y, 0);
                         XYZ run1LocalEnd = new XYZ(run1Length, run1Y, 0);
-                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, 0);
-                        XYZ run2LocalEnd = new XYZ(0, run2Y, 0);
+                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1HeightFt);
+                        XYZ run2LocalEnd = new XYZ(0, run2Y, run1HeightFt);
 
-                        // ── 应用旋转变换 ──
+
+
                         var rotate = Transform.CreateRotation(XYZ.BasisZ, angleRad);
-                        var translate = Transform.CreateTranslation(insertionPt);
+                        var translate = Transform.CreateTranslation(insertionPtCorrected);
                         var transform = translate.Multiply(rotate);
 
                         XYZ run1Start = transform.OfPoint(run1LocalStart);
@@ -208,20 +219,25 @@ namespace StairsPlugin
                             StairsRunJustification.Center);
                         run1.ActualRunWidth = runWidthFt;
                         run1Id = run1.Id;
-
+                        
+                        /*
+                        run1.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
+                            .Set(run1HeightFt);
+                        run1.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
+                            .Set(insertionPtCorrected.Z);
+                        */
                         // ── 创建第二跑 ──
                         StairsRun run2 = StairsRun.CreateStraightRun(
                             doc, stairsId,
                             Line.CreateBound(run2Start, run2End),
                             StairsRunJustification.Center);
                         run2.ActualRunWidth = runWidthFt;
-
-                        double run1HeightFt = calcResult.Run1Steps * riserFt;
+                        /*
                         run2.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
                             .Set(totalHeightFt);
                         run2.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
                             .Set(run1HeightFt);
-
+                        */
                         doc.Regenerate();
 
                         // ── 自动生成休息平台 ──
