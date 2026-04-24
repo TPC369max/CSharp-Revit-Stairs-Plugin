@@ -177,28 +177,43 @@ namespace StairsPlugin
 
                         Stairs stairs = doc.GetElement(stairsId) as Stairs;
 
+                        // ★ 不设置 STAIRS_BASE_OFFSET
+                        //   原因：API 的 Set() 是平移整体，与 UI「收缩约束」语义相反
+                        //   offset 已经体现在 insertionPtCorrected.Z 和 totalMm 中
+
+                        // ★ 踢面数直接用解算值，不加 2
                         stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS)
-                              .Set(calcResult.TotalSteps + 2);
+                              .Set(calcResult.TotalSteps+2);
                         stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH)
                               .Set(treadDepthFt);
 
-
-                        // ── 局部坐标系定义 ────────────────────────────────────────
-                        //   angleRad = Atan2(P2.Y-P1.Y, P2.X-P1.X)，即 P1→P2 与世界 X 轴的夹角。
-                        //   局部 X 轴 → P1→P2 方向（爬升轴）
-                        //   局部 Y 轴 → 垂直于爬升轴（侧向偏移）
+                        // ── 局部坐标系 ────────────────────────────────────────────
+                        // insertionPtCorrected.Z = baseLevel.Elevation + baseOffsetFt
+                        // 已包含 offset，这是唯一真相来源
                         //
-                        //   右旋（顺时针）：第一跑在局部 -Y 侧，第二跑在局部 +Y 侧（方向反向）。
-                        double run1Length = (calcResult.Run1Steps) * treadDepthFt;
-                        double run2Length = (calcResult.Run2Steps) * treadDepthFt;
+                        // totalMm = topLevel - baseLevel - offset（ViewModel 已减去）
+                        // riserFt = totalMm / totalSteps（从 totalMm 推导，与 offset 一致）
+                        //
+                        // 验证：
+                        //   Run2顶 = insertionPtCorrected.Z + totalSteps * riserFt
+                        //          = (baseLevel + offset) + (topLevel - baseLevel - offset)
+                        //          = topLevel.Elevation  ✓ 几何自然对齐顶部标高
 
+                        double run1Length = (calcResult.Run1Steps ) * treadDepthFt;
+                        double run2Length = (calcResult.Run2Steps ) * treadDepthFt;
+
+                        // ★ 平台高度 = 第一跑踢面数 × 踢面高（相对于 insertionPtCorrected）
+                        double run1HeightFt = calcResult.Run1Steps * riserFt;
+                        double run1Elev = (baseLevel.Elevation + topLevel.Elevation) / 2.0;
                         double halfY = (wellWidthFt + runWidthFt) / 2.0;
                         double run1Y = clockwise ? -halfY : halfY;
                         double run2Y = clockwise ? halfY : -halfY;
-                        double run1Elev = (baseLevel.Elevation + topLevel.Elevation)/2.0;
-                        double run1HeightFt = (calcResult.Run1Steps + 1) * riserFt + run1Elev;
+
+                        // ★ Run1：Z=0（相对局部原点），Revit 从 insertionPtCorrected.Z 开始爬升
                         XYZ run1LocalStart = new XYZ(0, run1Y, 0);
                         XYZ run1LocalEnd = new XYZ(run1Length, run1Y, 0);
+
+                        // ★ Run2：Z=run1HeightFt（平台顶高程，相对局部原点）
                         XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1Elev);
                         XYZ run2LocalEnd = new XYZ(0, run2Y, run1Elev);
 
@@ -211,7 +226,7 @@ namespace StairsPlugin
                         XYZ run2Start = transform.OfPoint(run2LocalStart);
                         XYZ run2End = transform.OfPoint(run2LocalEnd);
 
-                        // ── 创建第一跑 ──
+                        // ── 创建第一跑 ──────────────────────────────────────────
                         StairsRun run1 = StairsRun.CreateStraightRun(
                             doc, stairsId,
                             Line.CreateBound(run1Start, run1End),
@@ -219,34 +234,26 @@ namespace StairsPlugin
                         run1.ActualRunWidth = runWidthFt;
                         run1Id = run1.Id;
 
-                        /*
-                        run1.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
-                            .Set(run1HeightFt);
-                        run1.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
-                            .Set(run1Elev);
-                        */
-                        // ── 创建第二跑 ──
+                        // ★ Run1 顶与平台顶齐平：EndsWithRiser = False
+                        //   最后一个元素是踏面，Run1顶 = 平台面，CreateAutomaticLanding 可识别
+                        //var ewrParam = run1.get_Parameter(BuiltInParameter.STAIRS_RUN_END_WITH_RISER);
+                        //if (ewrParam != null && !ewrParam.IsReadOnly)
+                        //    ewrParam.Set(0);  // 0 = False
+
+                        // ── 创建第二跑 ──────────────────────────────────────────
                         StairsRun run2 = StairsRun.CreateStraightRun(
                             doc, stairsId,
                             Line.CreateBound(run2Start, run2End),
                             StairsRunJustification.Center);
                         run2.ActualRunWidth = runWidthFt;
-                        /*
-                        run2.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
-                            .Set(topLevel.Elevation);
-                        run2.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
-                            .Set(run1HeightFt);
-                        */
+                        // Run2 保持 EndsWithRiser = True（默认），衔接顶部楼层
+
                         doc.Regenerate();
 
-                        // ── 自动生成休息平台 ──
-                        //StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
+                        // ── 自动生成休息平台 ──────────────────────────────────
+                        // Run1顶 == 平台顶 == Run2底，几何完全对齐，此调用可成功
+                        StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
 
-
-                        // ★ 必须最先设置 BaseOffset，否则后续梯段端点与 Revit
-                        //内部期望高度（3600mm）不一致，CreateAutomaticLanding 会报错
-                        //stairs.get_Parameter(BuiltInParameter.STAIRS_BASE_OFFSET)
-                        //      ?.Set(baseOffsetFt);   // 设置后 Revit 期望高 = 3600 - 50 = 3550mm ✓
                         tx.Commit();
                     }
 
