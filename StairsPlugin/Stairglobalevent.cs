@@ -73,7 +73,7 @@ namespace StairsPlugin
                 XYZ insertionPtCorrected = new XYZ(
                     insertionPt.X,
                     insertionPt.Y,
-                    baseLevel.Elevation + baseOffsetFt);   // 绝对高程（英尺）
+                    baseLevel.Elevation+ baseOffsetFt);   // 绝对高程（英尺）
 
                 double runWidthFt = MmToFt(vm.RunWidthMm);
                 double treadDepthFt = MmToFt((double)vm.ActualTreadDepthMm);
@@ -178,9 +178,10 @@ namespace StairsPlugin
                         Stairs stairs = doc.GetElement(stairsId) as Stairs;
 
                         stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS)
-                              .Set(calcResult.TotalSteps);
+                              .Set(calcResult.TotalSteps + 2);
                         stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH)
                               .Set(treadDepthFt);
+
 
                         // ── 局部坐标系定义 ────────────────────────────────────────
                         //   angleRad = Atan2(P2.Y-P1.Y, P2.X-P1.X)，即 P1→P2 与世界 X 轴的夹角。
@@ -188,20 +189,18 @@ namespace StairsPlugin
                         //   局部 Y 轴 → 垂直于爬升轴（侧向偏移）
                         //
                         //   右旋（顺时针）：第一跑在局部 -Y 侧，第二跑在局部 +Y 侧（方向反向）。
-                        double run1Length = (calcResult.Run1Steps - 1) * treadDepthFt;
-                        double run2Length = (calcResult.Run2Steps - 1) * treadDepthFt;
+                        double run1Length = (calcResult.Run1Steps) * treadDepthFt;
+                        double run2Length = (calcResult.Run2Steps) * treadDepthFt;
 
                         double halfY = (wellWidthFt + runWidthFt) / 2.0;
                         double run1Y = clockwise ? -halfY : halfY;
                         double run2Y = clockwise ? halfY : -halfY;
-
-                        double run1HeightFt = calcResult.Run1Steps * riserFt;
+                        double run1Elev = (baseLevel.Elevation + topLevel.Elevation)/2.0;
+                        double run1HeightFt = (calcResult.Run1Steps + 1) * riserFt + run1Elev;
                         XYZ run1LocalStart = new XYZ(0, run1Y, 0);
                         XYZ run1LocalEnd = new XYZ(run1Length, run1Y, 0);
-                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1HeightFt);
-                        XYZ run2LocalEnd = new XYZ(0, run2Y, run1HeightFt);
-
-
+                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1Elev);
+                        XYZ run2LocalEnd = new XYZ(0, run2Y, run1Elev);
 
                         var rotate = Transform.CreateRotation(XYZ.BasisZ, angleRad);
                         var translate = Transform.CreateTranslation(insertionPtCorrected);
@@ -219,12 +218,12 @@ namespace StairsPlugin
                             StairsRunJustification.Center);
                         run1.ActualRunWidth = runWidthFt;
                         run1Id = run1.Id;
-                        
+
                         /*
                         run1.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
                             .Set(run1HeightFt);
                         run1.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
-                            .Set(insertionPtCorrected.Z);
+                            .Set(run1Elev);
                         */
                         // ── 创建第二跑 ──
                         StairsRun run2 = StairsRun.CreateStraightRun(
@@ -234,15 +233,20 @@ namespace StairsPlugin
                         run2.ActualRunWidth = runWidthFt;
                         /*
                         run2.get_Parameter(BuiltInParameter.STAIRS_RUN_TOP_ELEVATION)
-                            .Set(totalHeightFt);
+                            .Set(topLevel.Elevation);
                         run2.get_Parameter(BuiltInParameter.STAIRS_RUN_BOTTOM_ELEVATION)
                             .Set(run1HeightFt);
                         */
                         doc.Regenerate();
 
                         // ── 自动生成休息平台 ──
-                        StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
+                        //StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
 
+
+                        // ★ 必须最先设置 BaseOffset，否则后续梯段端点与 Revit
+                        //内部期望高度（3600mm）不一致，CreateAutomaticLanding 会报错
+                        //stairs.get_Parameter(BuiltInParameter.STAIRS_BASE_OFFSET)
+                        //      ?.Set(baseOffsetFt);   // 设置后 Revit 期望高 = 3600 - 50 = 3550mm ✓
                         tx.Commit();
                     }
 

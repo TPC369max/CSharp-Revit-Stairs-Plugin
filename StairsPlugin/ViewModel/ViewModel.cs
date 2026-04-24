@@ -634,12 +634,12 @@ namespace StairsPlugin.ViewModel
             {
                 // ── 由水平约束推导踏步级数 ───────────────────────────────────
                 // P1→P2 距离 = 楼梯水平投影矩形的一条边（固定值）
-                // TotalSteps × TreadDepthMm + LandingDepthMm = P1P2距离
+                // TotalSteps/2 × TreadDepthMm + LandingDepthMm = P1P2距离
                 // → TotalSteps = Floor((P1P2距离 - LandingDepthMm) / TreadDepthMm)
                 double p1p2Mm = ToMm(Math.Sqrt(
                     Math.Pow(P2.X - P1.X, 2) + Math.Pow(P2.Y - P1.Y, 2)));
                 int totalSteps = TreadDepthMm > 0
-                    ? (int)Math.Floor((p1p2Mm - LandingDepthMm) * 2 / TreadDepthMm)
+                    ? (int)Math.Ceiling((p1p2Mm - LandingDepthMm) * 2 / TreadDepthMm)
                     : 0;
 
                 // P1P2 距离必须大于休息平台深度，否则扣除平台后无空间容纳任何踏步
@@ -662,7 +662,7 @@ namespace StairsPlugin.ViewModel
                 // 反算实际踏步宽（写入只读预览属性，不回写用户输入框）
                 if (totalSteps > 0)
                 {
-                    _actualTreadDepthMm = (p1p2Mm - LandingDepthMm) * 2 / (totalSteps - 2);
+                    _actualTreadDepthMm = (p1p2Mm - LandingDepthMm) * 2 / (totalSteps);
                     OnPropertyChanged(nameof(PreviewActualTread));
                 }
                 else

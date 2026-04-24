@@ -39,7 +39,7 @@ namespace StairsPlugin.Model
             if (totalSteps <= 0)
                 return new StairCalculationResult { IsValid = false };
 
-            double riserHeight = totalHeightMm / totalSteps;
+            double riserHeight = totalHeightMm / (totalSteps+2);
             int run1 = (totalSteps % 2 == 0)
                 ? totalSteps / 2
                 : (totalSteps + 1) / 2;   // 奇数时第一跑多一步（行业惯例）
