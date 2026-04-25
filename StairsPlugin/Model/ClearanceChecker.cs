@@ -118,8 +118,8 @@ namespace StairsPlugin.Model
             // ── 重建局部坐标系变换（与 StairGlobalEventHandler 一致）──────
             // 局部 X → P1→P2 方向（爬升轴）
             // 局部 Y → 垂直于爬升轴（侧向偏移）
-            double run1Length = (calcResult.Run1Steps - 1) * treadDepthFt;
-            double run2Length = (calcResult.Run2Steps - 1) * treadDepthFt;
+            double run1Length = (calcResult.Run1Steps) * treadDepthFt;
+            double run2Length = (calcResult.Run2Steps) * treadDepthFt;
             double halfY = (wellWidthFt + runWidthFt) / 2.0;
             double run1Y = clockwise ? -halfY : halfY;   // 右旋：第一跑在 -Y 侧
             double run2Y = clockwise ? halfY : -halfY;   // 右旋：第二跑在 +Y 侧
@@ -140,22 +140,21 @@ namespace StairsPlugin.Model
 
                 XYZ origin = BuildOrigin(tf, localX, run1Y, stepElev);
                 double clearFt = CastRayUp(intersector, origin);
-                if (clearFt < minStepClearFt)
+                if (clearFt < minStepClearFt&& clearFt>0)
                     minStepClearFt = clearFt;
             }
 
             // ── 遍历第二跑每级踏步 ────────────────────────────────────
-            for (int j = 0; j < calcResult.Run2Steps; j++)
+            for (int j = 0; j <= calcResult.Run2Steps; j++)
             {
                 // 第二跑沿局部 X 从 run2Length → 0（逆向），
                 // j = 0 对应平台侧第一步（局部 X = run2Length）
                 double localX = run2Length - j * treadDepthFt;
-                double stepElev = baseElevFt
-                                + (calcResult.Run1Steps + j + 1) * riserHeightFt;
+                double stepElev = baseElevFt + (calcResult.Run1Steps + j + 2) * riserHeightFt;
 
                 XYZ origin = BuildOrigin(tf, localX, run2Y, stepElev);
                 double clearFt = CastRayUp(intersector, origin);
-                if (clearFt < minStepClearFt)
+                if (clearFt < minStepClearFt&&clearFt > 0)
                     minStepClearFt = clearFt;
             }
 
@@ -164,7 +163,7 @@ namespace StairsPlugin.Model
             {
                 double landingLocalX = (run1Length + run2Length) / 2.0;
                 double landingLocalY = 0.0;                              // run1Y 与 run2Y 的中点
-                double landingElev = baseElevFt + calcResult.Run1Steps * riserHeightFt;
+                double landingElev = baseElevFt + (calcResult.Run1Steps+1) * riserHeightFt;
 
                 XYZ origin = BuildOrigin(tf, landingLocalX, landingLocalY, landingElev);
                 minLandingClearFt = CastRayUp(intersector, origin);

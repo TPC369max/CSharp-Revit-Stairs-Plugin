@@ -4,7 +4,9 @@ using Autodesk.Revit.UI;
 using StairsPlugin.Model;
 using StairsPlugin.ViewModel;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Documents;
 
 namespace StairsPlugin
 {
@@ -65,15 +67,47 @@ namespace StairsPlugin
                 double angleRad = vm.DirectionAngleRad;
                 bool clockwise = vm.IsClockwise;
 
+
+                ElementId stairsId = ElementId.InvalidElementId;
+                ElementId run1Id = ElementId.InvalidElementId;
+
+                // ── 在 StairsEditScope 外，先用事务创建偏移标高 ────────────
+                ElementId tempLevelId = ElementId.InvalidElementId;
+                Level adjustedBaseLevel = null;
+
+
                 // ── 应用旋转 + 平移变换 ───────────────────────────────────
                 // P1 在平面视图中拾取，其 Z 值取决于视图高程，不可直接使用。
                 // 以底部标高绝对高程 + 底部偏移作为正确的 Z 原点，
                 // 保证梯段起点严格落在用户指定的楼层面上。
                 double baseOffsetFt = MmToFt(vm.BaseOffsetMm);
+                double adjustedElevFt = baseLevel.Elevation + baseOffsetFt;
                 XYZ insertionPtCorrected = new XYZ(
                     insertionPt.X,
                     insertionPt.Y,
-                    baseLevel.Elevation+ baseOffsetFt);   // 绝对高程（英尺）
+                    adjustedElevFt);   // 绝对高程（英尺）
+
+                using (var txLevel = new Transaction(doc, "创建偏移标高"))
+                {
+                    txLevel.Start();
+
+                    // 检查是否已存在误差 < 1mm 的标高，避免重复创建
+                    adjustedBaseLevel = new FilteredElementCollector(doc)
+                        .OfClass(typeof(Level))
+                        .Cast<Level>()
+                        .FirstOrDefault(l => Math.Abs(l.Elevation - adjustedElevFt)
+                                             < MmToFt(1.0));
+
+                    if (adjustedBaseLevel == null)
+                    {
+                        // 动态创建标高（不设置视图，避免干扰项目）
+                        adjustedBaseLevel = Level.Create(doc, adjustedElevFt);
+                        adjustedBaseLevel.Name = $"_TempStairBase_{DateTime.Now:HHmmss}";
+                        tempLevelId = adjustedBaseLevel.Id;  // 记录 ID 以便事后删除
+                    }
+
+                    txLevel.Commit();
+                }
 
                 double runWidthFt = MmToFt(vm.RunWidthMm);
                 double treadDepthFt = MmToFt((double)vm.ActualTreadDepthMm);
@@ -108,19 +142,19 @@ namespace StairsPlugin
                         .FirstOrDefault(v => !v.IsTemplate);
 
                     var clearResult = ClearanceChecker.Check(
-                        doc: view3D != null ? doc : null,
-                        view3D: view3D,
-                        insertionPoint: insertionPtCorrected,
-                        calcResult: calcResult,
-                        riserHeightFt: riserFt,
-                        treadDepthFt: treadDepthFt,
-                        angleRad: angleRad,
-                        runWidthFt: runWidthFt,
-                        wellWidthFt: wellWidthFt,
-                        clockwise: clockwise,
-                        baseElevFt: baseLevel.Elevation,
-                        minClearStepMm: 2200,   // 梯段净高下限（GB55031-2022）
-                        minClearLandingMm: 2000);  // 平台净高下限
+    doc: view3D != null ? doc : null,
+    view3D: view3D,
+    insertionPoint: insertionPtCorrected,
+    calcResult: calcResult,
+    riserHeightFt: riserFt,
+    treadDepthFt: treadDepthFt,
+    angleRad: angleRad,
+    runWidthFt: runWidthFt,
+    wellWidthFt: wellWidthFt,
+    clockwise: clockwise,
+    baseElevFt: adjustedBaseLevel.Elevation,  // ★ 改为偏移后的标高，与实际梯段起点一致
+    minClearStepMm: 2200,
+    minClearLandingMm: 2000);
 
                     if (!clearResult.IsCompliant)
                     {
@@ -164,47 +198,30 @@ namespace StairsPlugin
                 //  净空预检完毕，以下执行楼梯生成事务
                 // ════════════════════════════════════════════════════════
 
-                ElementId stairsId = ElementId.InvalidElementId;
-                ElementId run1Id = ElementId.InvalidElementId;
 
+                // ── 使用偏移标高创建楼梯 ─────────────────────────────────────
                 using (var scope = new StairsEditScope(doc, "自动生成双跑楼梯"))
                 {
-                    stairsId = scope.Start(baseLevel.Id, topLevel.Id);
+                    // 底部用偏移标高，顶部标高不变 → 有效高 = topLevel - adjustedBase
+                    stairsId = scope.Start(adjustedBaseLevel.Id, topLevel.Id);
 
                     using (var tx = new Transaction(doc, "绘制梯段与平台"))
                     {
                         tx.Start();
 
                         Stairs stairs = doc.GetElement(stairsId) as Stairs;
-
-                        // ★ 不设置 STAIRS_BASE_OFFSET
-                        //   原因：API 的 Set() 是平移整体，与 UI「收缩约束」语义相反
-                        //   offset 已经体现在 insertionPtCorrected.Z 和 totalMm 中
-
-                        // ★ 踢面数直接用解算值，不加 2
                         stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS)
-                              .Set(calcResult.TotalSteps+2);
+                              .Set(calcResult.TotalSteps + 2);
                         stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH)
                               .Set(treadDepthFt);
 
-                        // ── 局部坐标系 ────────────────────────────────────────────
-                        // insertionPtCorrected.Z = baseLevel.Elevation + baseOffsetFt
-                        // 已包含 offset，这是唯一真相来源
-                        //
-                        // totalMm = topLevel - baseLevel - offset（ViewModel 已减去）
-                        // riserFt = totalMm / totalSteps（从 totalMm 推导，与 offset 一致）
-                        //
-                        // 验证：
-                        //   Run2顶 = insertionPtCorrected.Z + totalSteps * riserFt
-                        //          = (baseLevel + offset) + (topLevel - baseLevel - offset)
-                        //          = topLevel.Elevation  ✓ 几何自然对齐顶部标高
+                        double run1HeightFt = (calcResult.Run1Steps + 1) * riserFt;
 
-                        double run1Length = (calcResult.Run1Steps ) * treadDepthFt;
-                        double run2Length = (calcResult.Run2Steps ) * treadDepthFt;
+                        double run1Length = (calcResult.Run1Steps) * treadDepthFt;
+                        double run2Length = (calcResult.Run2Steps) * treadDepthFt;
 
                         // ★ 平台高度 = 第一跑踢面数 × 踢面高（相对于 insertionPtCorrected）
-                        double run1HeightFt = calcResult.Run1Steps * riserFt;
-                        double run1Elev = (baseLevel.Elevation + topLevel.Elevation) / 2.0;
+                        double run1Elev = (adjustedBaseLevel.Elevation + topLevel.Elevation) / 2.0;
                         double halfY = (wellWidthFt + runWidthFt) / 2.0;
                         double run1Y = clockwise ? -halfY : halfY;
                         double run2Y = clockwise ? halfY : -halfY;
@@ -214,8 +231,8 @@ namespace StairsPlugin
                         XYZ run1LocalEnd = new XYZ(run1Length, run1Y, 0);
 
                         // ★ Run2：Z=run1HeightFt（平台顶高程，相对局部原点）
-                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1Elev);
-                        XYZ run2LocalEnd = new XYZ(0, run2Y, run1Elev);
+                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1HeightFt);
+                        XYZ run2LocalEnd = new XYZ(0, run2Y, run1HeightFt);
 
                         var rotate = Transform.CreateRotation(XYZ.BasisZ, angleRad);
                         var translate = Transform.CreateTranslation(insertionPtCorrected);
@@ -252,13 +269,17 @@ namespace StairsPlugin
 
                         // ── 自动生成休息平台 ──────────────────────────────────
                         // Run1顶 == 平台顶 == Run2底，几何完全对齐，此调用可成功
-                        StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
 
+                        StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
                         tx.Commit();
                     }
 
                     scope.Commit(new StairsFailurePreprocessor());
                 }
+
+
+
+
 
                 // ── 栏杆处理（必须在 StairsEditScope 关闭后执行）──────────
                 using (var txRailing = new Transaction(doc, "处理栏杆扶手"))
@@ -292,6 +313,39 @@ namespace StairsPlugin
                     txRailing.Commit();
                 }
 
+                // 不删除，改为有意义的名称，并隐藏平面视图
+                if (tempLevelId != ElementId.InvalidElementId)
+                {
+                    using (var txRename = new Transaction(doc, "整理临时标高"))
+                    {
+                        txRename.Start();
+
+                        Level tempLv = doc.GetElement(tempLevelId) as Level;
+                        // 重命名为有意义的标高，而不是删除
+                        tempLv.Name = $"{baseLevel.Name}_偏移{vm.BaseOffsetMm:F0}mm";
+
+                        // 在所有平面视图中隐藏该标高线（减少干扰）
+                        foreach (var view in new FilteredElementCollector(doc)
+                            .OfClass(typeof(ViewPlan))
+                            .Cast<ViewPlan>()
+                            .Where(v => !v.IsTemplate))
+                        {
+                            try
+                            {
+                                view.HideElements(new[] { tempLevelId }
+                                    .ToList()
+                                    .Select(id => id)
+                                    .ToList()
+                                    .Concat(new List<ElementId>())
+                                    .ToList());
+                            }
+                            catch { /* 部分视图不支持隐藏，跳过 */ }
+                        }
+
+                        txRename.Commit();
+                    }
+                }
+
                 // ── 生成完成提示 ────────────────────────────────────────────
                 Stairs newStairs = doc.GetElement(stairsId) as Stairs;
                 StairsRun finalRun = doc.GetElement(run1Id) as StairsRun;
@@ -303,6 +357,7 @@ namespace StairsPlugin
                     $"踢面高：{FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
                     $"梯段净宽：{FtToMm(finalRun.ActualRunWidth):F0} mm\n" +
                     $"方向角 θ = {angleRad * 180 / Math.PI:F1}°");
+
             }
             catch (Exception ex)
             {
