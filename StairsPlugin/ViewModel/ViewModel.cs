@@ -181,54 +181,150 @@ namespace StairsPlugin.ViewModel
         // =============================================================
         //  几何参数
         // =============================================================
+        //  几何参数
+        //
+        //  每个数值参数由两层组成：
+        //    • xxxText  (string)  ← XAML TextBox 绑定目标，负责解析与错误追踪
+        //    • _xxxMm   (double)  ← 计算层使用的合法数值，仅在解析成功后更新
+        //
+        //  XAML 修改要点：
+        //    将 Binding Path 从 RunWidthMm → RunWidthText，以此类推；
+        //    移除 ValidatesOnExceptions=True（解析错误现由 ViewModel 自行追踪）；
+        //    红框样式改为绑定 HasInputError 或各字段对应的 XxxHasError 属性。
+        // =============================================================
+
+        // ── 梯段净宽 ─────────────────────────────────────────────────
         private double _runWidthMm = 1200;
-        public double RunWidthMm
+        public double RunWidthMm => _runWidthMm;   // 供 Handler / Recalculate 读取
+
+        private string _runWidthText = "1200";
+        public string RunWidthText
         {
-            get => _runWidthMm;
+            get => _runWidthText;
             set
             {
-                if (SetField(ref _runWidthMm, value))
-                    Recalculate();
+                if (SetField(ref _runWidthText, value))
+                {
+                    if (double.TryParse(value, out double parsed) && parsed > 0)
+                    {
+                        SetInputError(nameof(RunWidthText), false);
+                        if (_runWidthMm != parsed)
+                        {
+                            _runWidthMm = parsed;
+                            Recalculate();
+                        }
+                    }
+                    else
+                        SetInputError(nameof(RunWidthText), true);
+                }
             }
         }
 
+        // ── 踏步宽 ───────────────────────────────────────────────────
         private double _treadDepthMm = 260;
-        public double TreadDepthMm
+        public double TreadDepthMm => _treadDepthMm;
+
+        private string _treadDepthText = "260";
+        public string TreadDepthText
         {
-            get => _treadDepthMm;
+            get => _treadDepthText;
             set
             {
-                if (SetField(ref _treadDepthMm, value))
-                    Recalculate();
+                if (SetField(ref _treadDepthText, value))
+                {
+                    if (double.TryParse(value, out double parsed) && parsed > 0)
+                    {
+                        SetInputError(nameof(TreadDepthText), false);
+                        if (_treadDepthMm != parsed)
+                        {
+                            _treadDepthMm = parsed;
+                            Recalculate();
+                        }
+                    }
+                    else
+                        SetInputError(nameof(TreadDepthText), true);
+                }
             }
         }
 
+        // ── 井道宽 ───────────────────────────────────────────────────
         private double _wellWidthMm = 100;
-        public double WellWidthMm
-        {
-            get => _wellWidthMm;
-            set => SetField(ref _wellWidthMm, value);
-        }
+        public double WellWidthMm => _wellWidthMm;
 
-        private double _landingDepthMm = 1200;
-        public double LandingDepthMm
+        private string _wellWidthText = "100";
+        public string WellWidthText
         {
-            get => _landingDepthMm;
+            get => _wellWidthText;
             set
             {
-                if (SetField(ref _landingDepthMm, value))
-                    Recalculate();
+                if (SetField(ref _wellWidthText, value))
+                {
+                    if (double.TryParse(value, out double parsed) && parsed >= 0)
+                    {
+                        SetInputError(nameof(WellWidthText), false);
+                        if (_wellWidthMm != parsed)
+                        {
+                            _wellWidthMm = parsed;
+                            OnPropertyChanged(nameof(WellWidthMm));
+                        }
+                    }
+                    else
+                        SetInputError(nameof(WellWidthText), true);
+                }
             }
         }
 
-        private double _baseOffsetMm = 0;
-        public double BaseOffsetMm
+        // ── 休息平台深度 ─────────────────────────────────────────────
+        private double _landingDepthMm = 1200;
+        public double LandingDepthMm => _landingDepthMm;
+
+        private string _landingDepthText = "1200";
+        public string LandingDepthText
         {
-            get => _baseOffsetMm;
+            get => _landingDepthText;
             set
             {
-                if (SetField(ref _baseOffsetMm, value))
-                    Recalculate();
+                if (SetField(ref _landingDepthText, value))
+                {
+                    if (double.TryParse(value, out double parsed) && parsed > 0)
+                    {
+                        SetInputError(nameof(LandingDepthText), false);
+                        if (_landingDepthMm != parsed)
+                        {
+                            _landingDepthMm = parsed;
+                            Recalculate();
+                        }
+                    }
+                    else
+                        SetInputError(nameof(LandingDepthText), true);
+                }
+            }
+        }
+
+        // ── 底部偏移 ─────────────────────────────────────────────────
+        private double _baseOffsetMm = 0;
+        public double BaseOffsetMm => _baseOffsetMm;
+
+        private string _baseOffsetText = "0";
+        public string BaseOffsetText
+        {
+            get => _baseOffsetText;
+            set
+            {
+                if (SetField(ref _baseOffsetText, value))
+                {
+                    if (double.TryParse(value, out double parsed))   // 偏移可为 0 或负
+                    {
+                        SetInputError(nameof(BaseOffsetText), false);
+                        if (_baseOffsetMm != parsed)
+                        {
+                            _baseOffsetMm = parsed;
+                            Recalculate();
+                        }
+                    }
+                    else
+                        SetInputError(nameof(BaseOffsetText), true);
+                }
             }
         }
 
@@ -387,6 +483,32 @@ namespace StairsPlugin.ViewModel
         public string RiserHeightBadgeText => RiserHeightOk
             ? "合规" : $"违规：踢面高须小于 {_currentRule?.MaxRiserHeight} mm";
 
+        // =============================================================
+        //  输入错误追踪（非法字符导致解析失败时置位）
+        // =============================================================
+        private readonly System.Collections.Generic.HashSet<string> _inputErrors
+            = new System.Collections.Generic.HashSet<string>();
+
+        /// <summary>
+        /// 任意数值 TextBox 含非法字符时为 true。
+        /// 加入 GenerateCommand.canExecute，确保非法输入时按钮变灰。
+        /// </summary>
+        public bool HasInputError => _inputErrors.Count > 0;
+
+        /// <summary>
+        /// 由字符串属性的 setter 调用：登记或撤销某字段的解析错误，
+        /// 并通知 GenerateCommand 重新评估 CanExecute。
+        /// </summary>
+        private void SetInputError(string fieldName, bool hasError)
+        {
+            if (hasError)
+                _inputErrors.Add(fieldName);
+            else
+                _inputErrors.Remove(fieldName);
+            OnPropertyChanged(nameof(HasInputError));
+            GenerateCommand?.RaiseCanExecuteChanged();
+        }
+
         private bool _hasViolation = false;
         public bool HasViolation
         {
@@ -449,7 +571,7 @@ namespace StairsPlugin.ViewModel
 
             GenerateCommand = new RelayCommand(
                 execute: OnGenerate,
-                canExecute: () => P1 != null && P2 != null && !HasViolation && !hasGeometryViolation
+                canExecute: () => P1 != null && P2 != null && !HasViolation && !hasGeometryViolation && !HasInputError
             );
         }
 
