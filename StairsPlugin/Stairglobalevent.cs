@@ -114,6 +114,7 @@ namespace StairsPlugin
                 double wellWidthFt = UnitConverter.MmToFt(vm.WellWidthMm);
                 double landingDepthFt = UnitConverter.MmToFt(vm.LandingDepthMm);
 
+
                 // ── 读取 ViewModel 已解算的踏步结果快照 ──────────────────
                 var calcResult = vm.CalcResult;
                 if (calcResult == null || calcResult.TotalSteps <= 0)
@@ -150,9 +151,9 @@ namespace StairsPlugin
                         angleRad: angleRad,
                         runWidthFt: runWidthFt,
                         wellWidthFt: wellWidthFt,
-                        landingDepthFt: landingDepthFt,
                         clockwise: clockwise,
                         baseElevFt: adjustedBaseLevel.Elevation,
+                        landingDepthFt: landingDepthFt,
                         minClearStepMm: 2200,
                         minClearLandingMm: 2000);
 
@@ -257,209 +258,84 @@ namespace StairsPlugin
 
                         doc.Regenerate();
 
-                        // ── 自动生成休息平台 ──────────────────────────────────
-                        // Run1 顶 = 平台面 = Run2 底，几何完全对齐时此调用成功
-                        StairsLanding.CreateAutomaticLanding(doc, run1.Id, run2.Id);
-                        // 在 Execute() 内临时加入，生成楼梯后立即运行
-                        // ================================================================
-                        //  获取 StairsLanding 全量参数 —— 五种方法完整示例
-                        //  放置位置：StairsLanding.CreateAutomaticLanding() 调用之后、tx.Commit() 之前
-                        // ================================================================
-
-                        StairsLanding landing = doc.GetElement(
-                            (doc.GetElement(stairsId) as Stairs).GetStairsLandings().First()
-                        ) as StairsLanding;
-
-                        StairsLandingType landingType =
-                            doc.GetElement(landing.GetTypeId()) as StairsLandingType;
-
-                        // ── 共用格式化辅助（局部函数）────────────────────────────────────
-                        string FormatValue(Parameter p)
-                        {
-                            return p.StorageType switch
-                            {
-                                StorageType.Double => $"{p.AsDouble():F6}  ({UnitUtils.ConvertFromInternalUnits(p.AsDouble(), UnitTypeId.Millimeters):F1} mm)",
-                                StorageType.Integer => p.AsInteger().ToString(),
-                                StorageType.String => p.AsString() ?? "(null)",
-                                StorageType.ElementId => $"ElementId={p.AsElementId().IntegerValue}",
-                                _ => "—"
-                            };
-                        }
-
-                        // ════════════════════════════════════════════════════════════════
-                        //  方法一：遍历 Element.Parameters（全量实例参数）
-                        // ════════════════════════════════════════════════════════════════
-                        {
-                            var sb = new StringBuilder();
-                            sb.AppendLine($"=== StairsLanding {landing.Id} · 方法一：全量实例参数 ===\n");
-
-                            foreach (Parameter p in landing.Parameters
-                                .Cast<Parameter>()
-                                .OrderBy(p => p.Definition.Name))
-                            {
-                                sb.AppendLine(
-                                    $"[{p.Definition.Name}]" +
-                                    $"\n    类型={p.StorageType,-12}" +
-                                    $"  只读={p.IsReadOnly}" +
-                                    $"\n    值  ={FormatValue(p)}\n");
-                            }
-
-                            TaskDialog.Show("方法一：全量实例参数", sb.ToString());
-                        }
-
-                        // ════════════════════════════════════════════════════════════════
-                        //  方法二：区分实例参数 vs 类型参数
-                        // ════════════════════════════════════════════════════════════════
-                        {
-                            var sb = new StringBuilder();
-
-                            // ── 实例参数 ─────────────────────────────────────────────────
-                            sb.AppendLine($"=== StairsLanding {landing.Id} · 方法二：实例参数 ===\n");
-                            foreach (Parameter p in landing.Parameters
-                                .Cast<Parameter>()
-                                .OrderBy(p => p.Definition.Name))
-                            {
-                                sb.AppendLine($"[{p.Definition.Name}]  只读={p.IsReadOnly}  {FormatValue(p)}");
-                            }
-
-                            // ── 类型参数 ─────────────────────────────────────────────────
-                            sb.AppendLine($"\n=== StairsLandingType {landingType?.Id} · 方法二：类型参数 ===\n");
-                            if (landingType != null)
-                            {
-                                foreach (Parameter p in landingType.Parameters
-                                    .Cast<Parameter>()
-                                    .OrderBy(p => p.Definition.Name))
-                                {
-                                    sb.AppendLine($"[{p.Definition.Name}]  只读={p.IsReadOnly}  {FormatValue(p)}");
-                                }
-                            }
-                            else
-                            {
-                                sb.AppendLine("（未找到对应的 StairsLandingType）");
-                            }
-
-                            TaskDialog.Show("方法二：实例 + 类型参数", sb.ToString());
-                        }
-
-                        // ════════════════════════════════════════════════════════════════
-                        //  方法三：GetOrderedParameters()（按 UI 属性面板顺序）
-                        // ════════════════════════════════════════════════════════════════
-                        {
-                            var sb = new StringBuilder();
-                            sb.AppendLine($"=== StairsLanding {landing.Id} · 方法三：UI 顺序参数 ===\n");
-
-                            IList<Parameter> ordered = landing.GetOrderedParameters();
-                            for (int i = 0; i < ordered.Count; i++)
-                            {
-                                Parameter p = ordered[i];
-                                sb.AppendLine(
-                                    $"#{i + 1:D2}  [{p.Definition.Name}]" +
-                                    $"  只读={p.IsReadOnly}" +
-                                    $"  {FormatValue(p)}");
-                            }
-
-                            TaskDialog.Show("方法三：UI 顺序参数", sb.ToString());
-                        }
-
-                        // ════════════════════════════════════════════════════════════════
-                        //  方法四：筛选「可写的 Double 参数」（最直接可操作）
-                        // ════════════════════════════════════════════════════════════════
-                        {
-                            var sb = new StringBuilder();
-
-                            // ── 实例层可写 Double ─────────────────────────────────────────
-                            sb.AppendLine($"=== StairsLanding {landing.Id} · 方法四：可写 Double 参数 ===\n");
-                            var writableDoubles = landing.Parameters
-                                .Cast<Parameter>()
-                                .Where(p => p.StorageType == StorageType.Double && !p.IsReadOnly)
-                                .OrderBy(p => p.Definition.Name)
-                                .ToList();
-
-                            if (writableDoubles.Count == 0)
-                                sb.AppendLine("（实例层无可写 Double 参数）");
-                            else
-                                foreach (Parameter p in writableDoubles)
-                                {
-                                    double mm = UnitUtils.ConvertFromInternalUnits(p.AsDouble(), UnitTypeId.Millimeters);
-                                    sb.AppendLine($"[{p.Definition.Name}]  {mm:F1} mm  （内部值={p.AsDouble():F6} ft）");
-                                }
-
-                            // ── 类型层可写 Double ─────────────────────────────────────────
-                            sb.AppendLine($"\n=== StairsLandingType · 方法四：类型层可写 Double 参数 ===\n");
-                            if (landingType != null)
-                            {
-                                var typeDoubles = landingType.Parameters
-                                    .Cast<Parameter>()
-                                    .Where(p => p.StorageType == StorageType.Double && !p.IsReadOnly)
-                                    .OrderBy(p => p.Definition.Name)
-                                    .ToList();
-
-                                if (typeDoubles.Count == 0)
-                                    sb.AppendLine("（类型层无可写 Double 参数）");
-                                else
-                                    foreach (Parameter p in typeDoubles)
-                                    {
-                                        double mm = UnitUtils.ConvertFromInternalUnits(p.AsDouble(), UnitTypeId.Millimeters);
-                                        sb.AppendLine($"[{p.Definition.Name}]  {mm:F1} mm  （内部值={p.AsDouble():F6} ft）");
-                                    }
-                            }
-
-                            TaskDialog.Show("方法四：可写 Double 参数", sb.ToString());
-                        }
-
-                        // ════════════════════════════════════════════════════════════════
-                        //  方法五：通过 BuiltInParameter 精确访问已知参数
+                        // ══════════════════════════════════════════════════════
+                        //  草图平台生成（CreateSketchedLanding）
                         //
-                        //  StairsLanding 目前无专属的 LANDING_* 枚举，
-                        //  以下列出实际可命中的通用枚举，其余需通过方法一确认名称后
-                        //  改用 LookupParameter("参数名") 访问。
-                        // ════════════════════════════════════════════════════════════════
+                        //  几何说明（U 形双跑楼梯局部坐标系）：
+                        //
+                        //    run1：从 X=0 沿 +X 爬升至 X=run1Length，Y=run1Y（中心线）
+                        //    run2：从 X=run2Length 沿 -X 爬升至 X=0，  Y=run2Y（中心线）
+                        //
+                        //    平台位于两跑远端（X 方向）：
+                        //      X 范围 = [min(run1Length,run2Length),
+                        //                max(run1Length,run2Length)]
+                        //      当两跑等长时 X 差值为零，取 landingDepthFt 保底；
+                        //      否则取实际差值与 landingDepthFt 中的较大值。
+                        //
+                        //      Y 范围 = 梯段外边缘到外边缘（含两侧梯段净宽）
+                        //        yMin = min(run1Y, run2Y) − runWidthFt / 2
+                        //        yMax = max(run1Y, run2Y) + runWidthFt / 2
+                        //
+                        //    平台底面高程（绝对，英尺）：
+                        //      landingElevFt = adjustedBaseLevel.Elevation
+                        //                    + (run1Steps + 1) × riserFt
+                        //      （Run1 共 run1Steps+1 个踢面，+1 来自楼梯整体首尾各加一级）
+                        //
+                        //  CurveLoop 顶点顺序（俯视逆时针）：
+                        //    c0(xMin,yMin) → c1(xMax,yMin) → c2(xMax,yMax) → c3(xMin,yMax)
+                        //  Revit 对草图平台不强制绕向，保持逆时针符合 Revit 通用约定。
+                        // ══════════════════════════════════════════════════════
+
+                        double landingElevFt =  (calcResult.Run1Steps + 1) * riserFt;
+
+                        // ── X 范围：以两跑远端差值为基础，保证不小于 landingDepthFt ──
+                        double xMin = Math.Min(run1Length, run2Length);
+                        double xMax = Math.Max(run1Length, run2Length);
+                        if (xMax - xMin < landingDepthFt)
+                            xMax = xMin + landingDepthFt;
+
+                        // ── Y 范围：梯段中心线 ± 半宽，取两跑外侧边缘 ──────────────
+                        double yMin = Math.Min(run1Y, run2Y) - runWidthFt / 2.0;
+                        double yMax = Math.Max(run1Y, run2Y) + runWidthFt / 2.0;
+
+                        // ── 四角点：局部坐标 → 世界坐标（Z 直接赋绝对高程）─────────
+                        XYZ c0 = CoordinateTransform.LocalToWorld(transform, xMin, yMin, landingElevFt);
+                        XYZ c1 = CoordinateTransform.LocalToWorld(transform, xMax, yMin, landingElevFt);
+                        XYZ c2 = CoordinateTransform.LocalToWorld(transform, xMax, yMax, landingElevFt);
+                        XYZ c3 = CoordinateTransform.LocalToWorld(transform, xMin, yMax, landingElevFt);
+
+                        // ── 构建闭合 CurveLoop（逆时针，俯视）──────────────────────
+                        var landingLoop = new CurveLoop();
+                        landingLoop.Append(Line.CreateBound(c0, c1));
+                        landingLoop.Append(Line.CreateBound(c1, c2));
+                        landingLoop.Append(Line.CreateBound(c2, c3));
+                        landingLoop.Append(Line.CreateBound(c3, c0));
+
+                        // ── 创建草图平台 ─────────────────────────────────────────
+                        StairsLanding landing = StairsLanding.CreateSketchedLanding(
+                            doc,
+                            stairsId,
+                            landingLoop,
+                            landingElevFt);
+
+                        // ── 调试：打印平台可写 Double 参数 ──────────────────────
+                        var sb = new StringBuilder();
+                        sb.AppendLine($"=== StairsLanding {landing.Id} 可写参数 ===\n");
+                        sb.AppendLine($"平台底面高程：{UnitConverter.FtToMm(landingElevFt):F1} mm\n");
+                        sb.AppendLine($"平台轮廓（局部坐标，mm）：");
+                        sb.AppendLine($"  X [{UnitConverter.FtToMm(xMin):F1}, {UnitConverter.FtToMm(xMax):F1}]");
+                        sb.AppendLine($"  Y [{UnitConverter.FtToMm(yMin):F1}, {UnitConverter.FtToMm(yMax):F1}]\n");
+
+                        foreach (Parameter p in landing.Parameters.Cast<Parameter>()
+                            .Where(p => p.StorageType == StorageType.Double && !p.IsReadOnly)
+                            .OrderBy(p => p.Definition.Name))
                         {
-                            var sb = new StringBuilder();
-                            sb.AppendLine($"=== StairsLanding {landing.Id} · 方法五：BuiltInParameter 精确访问 ===\n");
-
-                            // 已知可用于 StairsLanding 的 BuiltInParameter
-                            var knownParams = new (string Label, BuiltInParameter Bip)[]
-                            {
-        ("所需踢面数（楼梯级）",   BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS),
-        ("实际踏面深度",           BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH),
-        ("实际踢面高度",           BuiltInParameter.STAIRS_ACTUAL_RISER_HEIGHT),
-        ("注释",                   BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS),
-        ("标记",                   BuiltInParameter.ALL_MODEL_MARK),
-        ("阶段-创建",             BuiltInParameter.PHASE_CREATED),
-        ("阶段-拆除",             BuiltInParameter.PHASE_DEMOLISHED),
-                            };
-
-                            foreach (var (label, bip) in knownParams)
-                            {
-                                Parameter p = landing.get_Parameter(bip);
-                                if (p != null)
-                                    sb.AppendLine($"[{label}]  {FormatValue(p)}  只读={p.IsReadOnly}");
-                                else
-                                    sb.AppendLine($"[{label}]  → 此元素上不存在该 BIP");
-                            }
-
-                            // ── 通过名称查找（方法一确认名称后的生产写法）────────────────
-                            sb.AppendLine("\n── 按名称查找示例（替换为方法一中找到的真实参数名）──");
-
-                            // 常见候选名称，运行后按实际输出修正
-                            string[] candidateNames =
-                            {
-        "厚度", "宽度", "深度",
-        "Thickness", "Width", "Depth",
-        "结构厚度", "Structural Depth"
-    };
-
-                            foreach (string name in candidateNames)
-                            {
-                                Parameter p = landing.LookupParameter(name);
-                                sb.AppendLine(p != null
-                                    ? $"LookupParameter(\"{name}\")  → 找到！{FormatValue(p)}  只读={p.IsReadOnly}"
-                                    : $"LookupParameter(\"{name}\")  → 不存在");
-                            }
-
-                            TaskDialog.Show("方法五：BuiltInParameter 精确访问", sb.ToString());
+                            double valueMm = UnitUtils.ConvertFromInternalUnits(
+                                p.AsDouble(), UnitTypeId.Millimeters);
+                            sb.AppendLine($"[{p.Definition.Name}]  {valueMm:F1} mm");
                         }
+
+                        TaskDialog.Show("可写 Double 参数", sb.ToString());
                         tx.Commit();
                     }
 

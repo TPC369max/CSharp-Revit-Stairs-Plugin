@@ -150,7 +150,7 @@ namespace StairsPlugin.Model
             // ── 休息平台中心点 ────────────────────────────────────────
             // 平台位于两跑 X 端点正中、Y 方向居中（两跑中轴线的中点）
             {
-                double landingLocalX = (run1Length)* 2.0+landingDepthFt/2.0;
+                double landingLocalX = (run1Length)+landingDepthFt/2.0;
                 double landingLocalY = 0.0;
                 double landingElev = baseElevFt + (calcResult.Run1Steps + 1) * riserHeightFt;
 
