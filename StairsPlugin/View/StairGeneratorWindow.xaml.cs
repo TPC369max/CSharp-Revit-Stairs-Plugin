@@ -18,7 +18,7 @@ using StairsPlugin.ViewModel;
 //    × 任何直接操作控件属性（.Text= / .Background= 等）
 //    × 任何计算逻辑（踏步解算、高差计算）
 //
-//  ★ 架构变更说明（对应 AI对话.txt 建议）：
+//  ★ 架构变更说明
 //    旧方案：ShowDialog 模态 → PickPoint 与 WPF 消息循环冲突 → 孤立浮窗
 //    新方案：Show 非模态 + ExternalEvent → Hide/Show 自由切换，无冲突
 //    因此本文件移除了 SetDialogResultSafe / IsModal / OnGenerateRequested，

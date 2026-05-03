@@ -52,14 +52,17 @@
   <ItemGroup>
     <Compile Include="Main.cs" />
     <Compile Include="Model\ClearanceChecker.cs" />
+    <Compile Include="Model\CoordinateTransform.cs" />
     <Compile Include="Model\StairCalculator.cs" />
     <Compile Include="Model\StairCodeLibrary.cs" />
     <Compile Include="Model\StairCodeParams.cs" />
     <Compile Include="Stairglobalevent.cs" />
+    <Compile Include="Utils\UnitConverter.cs" />
     <Compile Include="ViewModel\RelayCommand.cs" />
     <Compile Include="RevitLevelTools.cs" />
     <Compile Include="ViewModel\ViewModelBase.cs" />
     <Compile Include="ViewModel\ViewModel.cs" />
+    <Compile Include="ViewModel\ViolationCollector.cs" />
     <Compile Include="View\StairGeneratorWindow.xaml.cs">
       <DependentUpon>StairGeneratorWindow.xaml</DependentUpon>
     </Compile>
@@ -92,8 +95,6 @@
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Utils\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
