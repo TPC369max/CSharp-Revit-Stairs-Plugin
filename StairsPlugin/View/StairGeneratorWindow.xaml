@@ -179,7 +179,7 @@
                     <TextBlock Grid.Column="0" Text="底部偏移"
                                Style="{StaticResource LabelStyle}"/>
                     <TextBox   Grid.Column="1" Style="{StaticResource NumBoxStyle}"
-                               Text="{Binding BaseOffsetMm, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                               Text="{Binding BaseOffsetText, UpdateSourceTrigger=PropertyChanged}"/>
                     <TextBlock Grid.Column="2" Text="mm" FontSize="12" Margin="6,0,0,0"
                                Foreground="{StaticResource UnitFg}" VerticalAlignment="Center"/>
                 </Grid>
@@ -320,7 +320,7 @@
                     <TextBlock Grid.Column="0" Text="梯段净宽"
                                Style="{StaticResource LabelStyle}"/>
                     <TextBox   Grid.Column="1" Style="{StaticResource NumBoxStyle}"
-                               Text="{Binding RunWidthMm, Mode=TwoWay,
+                               Text="{Binding RunWidthText,
                                               UpdateSourceTrigger=PropertyChanged}"/>
                     <TextBlock Grid.Column="2" Text="mm" FontSize="12" Margin="6,0,8,0"
                                Foreground="{StaticResource UnitFg}"
@@ -367,7 +367,7 @@
                     <TextBlock Grid.Column="0" Text="踏步宽度 b"
                                Style="{StaticResource LabelStyle}"/>
                     <TextBox   Grid.Column="1" Style="{StaticResource NumBoxStyle}"
-                               Text="{Binding TreadDepthMm, Mode=TwoWay,
+                               Text="{Binding TreadDepthText,
                                               UpdateSourceTrigger=PropertyChanged}"/>
                     <TextBlock Grid.Column="2" Text="mm" FontSize="12" Margin="6,0,8,0"
                                Foreground="{StaticResource UnitFg}"
@@ -412,7 +412,7 @@
                     <TextBlock Grid.Column="0" Text="梯井宽度"
                                Style="{StaticResource LabelStyle}"/>
                     <TextBox   Grid.Column="1" Style="{StaticResource NumBoxStyle}"
-                               Text="{Binding WellWidthMm, Mode=TwoWay,
+                               Text="{Binding WellWidthText,
                                               UpdateSourceTrigger=PropertyChanged}"/>
                     <TextBlock Grid.Column="2" Text="mm" FontSize="12" Margin="6,0,0,0"
                                Foreground="{StaticResource UnitFg}" VerticalAlignment="Center"/>
@@ -429,7 +429,7 @@
                     <TextBlock Grid.Column="0" Text="休息平台深"
                                Style="{StaticResource LabelStyle}"/>
                     <TextBox   Grid.Column="1" Style="{StaticResource NumBoxStyle}"
-                               Text="{Binding LandingDepthMm, Mode=TwoWay,
+                               Text="{Binding LandingDepthText,
                                               UpdateSourceTrigger=PropertyChanged}"/>
                     <TextBlock Grid.Column="2" Text="mm" FontSize="12" Margin="6,0,8,0"
                                Foreground="{StaticResource UnitFg}" VerticalAlignment="Center"/>

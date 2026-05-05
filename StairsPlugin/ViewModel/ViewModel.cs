@@ -195,7 +195,11 @@ namespace StairsPlugin.ViewModel
 
         // ── 梯段净宽 ─────────────────────────────────────────────────
         private double _runWidthMm = 1200;
-        public double RunWidthMm => _runWidthMm;   // 供 Handler / Recalculate 读取
+        public double RunWidthMm
+        {
+            get => _runWidthMm;
+            set => RunWidthText = value.ToString();
+        }
 
         private string _runWidthText = "1200";
         public string RunWidthText
@@ -222,7 +226,11 @@ namespace StairsPlugin.ViewModel
 
         // ── 踏步宽 ───────────────────────────────────────────────────
         private double _treadDepthMm = 260;
-        public double TreadDepthMm => _treadDepthMm;
+        public double TreadDepthMm
+        {
+            get => _treadDepthMm;
+            set => TreadDepthText = value.ToString();
+        }
 
         private string _treadDepthText = "260";
         public string TreadDepthText
@@ -249,7 +257,11 @@ namespace StairsPlugin.ViewModel
 
         // ── 井道宽 ───────────────────────────────────────────────────
         private double _wellWidthMm = 100;
-        public double WellWidthMm => _wellWidthMm;
+        public double WellWidthMm
+        {
+            get => _wellWidthMm;
+            set => WellWidthText = value.ToString();
+        }
 
         private string _wellWidthText = "100";
         public string WellWidthText
@@ -276,7 +288,11 @@ namespace StairsPlugin.ViewModel
 
         // ── 休息平台深度 ─────────────────────────────────────────────
         private double _landingDepthMm = 1200;
-        public double LandingDepthMm => _landingDepthMm;
+        public double LandingDepthMm
+        {
+            get => _landingDepthMm;
+            set => LandingDepthText = value.ToString();
+        }
 
         private string _landingDepthText = "1200";
         public string LandingDepthText
@@ -303,7 +319,11 @@ namespace StairsPlugin.ViewModel
 
         // ── 底部偏移 ─────────────────────────────────────────────────
         private double _baseOffsetMm = 0;
-        public double BaseOffsetMm => _baseOffsetMm;
+        public double BaseOffsetMm
+        {
+            get => _baseOffsetMm;
+            set => BaseOffsetText = value.ToString();
+        }
 
         private string _baseOffsetText = "0";
         public string BaseOffsetText
