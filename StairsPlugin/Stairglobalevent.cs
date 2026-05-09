@@ -85,14 +85,14 @@ namespace StairsPlugin
             if (ViewModel == null)
                 return;
 
-            var vm  = ViewModel;
+            var vm = ViewModel;
             Document doc = app.ActiveUIDocument.Document;
 
             try
             {
                 // ── 读取标高参数 ──────────────────────────────────────────
                 Level baseLevel = vm.SelectedBaseLevel;
-                Level topLevel  = vm.SelectedTopLevel;
+                Level topLevel = vm.SelectedTopLevel;
 
                 if (baseLevel == null || topLevel == null)
                 {
@@ -100,16 +100,16 @@ namespace StairsPlugin
                     return;
                 }
 
-                XYZ    insertionPt = vm.P1;
-                double angleRad    = vm.DirectionAngleRad;
-                bool   clockwise   = vm.IsClockwise;
+                XYZ insertionPt = vm.P1;
+                double angleRad = vm.DirectionAngleRad;
+                bool clockwise = vm.IsClockwise;
 
                 // ── 修正插入点的 Z 值 ──────────────────────────────────────
                 // 平面视图中拾取的 P1，其 Z 值由视图截面高程决定，不可直接信任。
                 // 以"底部标高高程 + 底部偏移"作为正确的 Z 原点，
                 // 保证梯段起点严格落在用户指定的楼层面（加偏移后的高度）上。
-                double baseOffsetFt    = UnitConverter.MmToFt(vm.BaseOffsetMm);
-                double adjustedElevFt  = baseLevel.Elevation + baseOffsetFt;
+                double baseOffsetFt = UnitConverter.MmToFt(vm.BaseOffsetMm);
+                double adjustedElevFt = baseLevel.Elevation + baseOffsetFt;
                 XYZ insertionPtCorrected = new XYZ(
                     insertionPt.X,
                     insertionPt.Y,
@@ -119,8 +119,8 @@ namespace StairsPlugin
                 // Revit 楼梯（Stairs）以标高（Level）作为起始和终止基准，
                 // 若用户设置了底部偏移，需要在偏移后的高程处单独创建标高。
                 // 此操作必须在 StairsEditScope 打开之前完成（StairsEditScope 不允许嵌套事务）。
-                ElementId tempLevelId     = ElementId.InvalidElementId;
-                Level     adjustedBaseLevel = null;
+                ElementId tempLevelId = ElementId.InvalidElementId;
+                Level adjustedBaseLevel = null;
 
                 using (var txLevel = new Transaction(doc, "创建偏移标高"))
                 {
@@ -136,18 +136,18 @@ namespace StairsPlugin
                     if (adjustedBaseLevel == null)
                     {
                         // 未找到可复用标高，新建临时标高并记录 ID 以便后续整理
-                        adjustedBaseLevel        = Level.Create(doc, adjustedElevFt);
-                        adjustedBaseLevel.Name   = $"_TempStairBase_{DateTime.Now:HHmmss}";
-                        tempLevelId              = adjustedBaseLevel.Id;
+                        adjustedBaseLevel = Level.Create(doc, adjustedElevFt);
+                        adjustedBaseLevel.Name = $"_TempStairBase_{DateTime.Now:HHmmss}";
+                        tempLevelId = adjustedBaseLevel.Id;
                     }
 
                     txLevel.Commit();
                 }
 
                 // ── 将几何参数从 mm 转换为 Revit 内部单位（英尺）──────────
-                double runWidthFt    = UnitConverter.MmToFt(vm.RunWidthMm);
-                double treadDepthFt  = UnitConverter.MmToFt((double)vm.ActualTreadDepthMm);
-                double wellWidthFt   = UnitConverter.MmToFt(vm.WellWidthMm);
+                double runWidthFt = UnitConverter.MmToFt(vm.RunWidthMm);
+                double treadDepthFt = UnitConverter.MmToFt((double)vm.ActualTreadDepthMm);
+                double wellWidthFt = UnitConverter.MmToFt(vm.WellWidthMm);
                 double landingDepthFt = UnitConverter.MmToFt(vm.LandingDepthMm);
 
                 // ── 读取 ViewModel 已解算的踏步结果快照 ──────────────────
@@ -185,19 +185,19 @@ namespace StairsPlugin
                         .FirstOrDefault(v => !v.IsTemplate);
 
                     var clearResult = ClearanceChecker.Check(
-                        doc:               view3D != null ? doc : null,
-                        view3D:            view3D,
-                        insertionPoint:    insertionPtCorrected,
-                        calcResult:        calcResult,
-                        riserHeightFt:     riserFt,
-                        treadDepthFt:      treadDepthFt,
-                        angleRad:          angleRad,
-                        runWidthFt:        runWidthFt,
-                        wellWidthFt:       wellWidthFt,
-                        clockwise:         clockwise,
-                        baseElevFt:        adjustedBaseLevel.Elevation,
-                        landingDepthFt:    landingDepthFt,
-                        minClearStepMm:    2200,  // GB55031-2022 §5.3.9 梯段净高
+                        doc: view3D != null ? doc : null,
+                        view3D: view3D,
+                        insertionPoint: insertionPtCorrected,
+                        calcResult: calcResult,
+                        riserHeightFt: riserFt,
+                        treadDepthFt: treadDepthFt,
+                        angleRad: angleRad,
+                        runWidthFt: runWidthFt,
+                        wellWidthFt: wellWidthFt,
+                        clockwise: clockwise,
+                        baseElevFt: adjustedBaseLevel.Elevation,
+                        landingDepthFt: landingDepthFt,
+                        minClearStepMm: 2200,  // GB55031-2022 §5.3.9 梯段净高
                         minClearLandingMm: 2000); // GB55031-2022 §5.3.9 平台净高
 
                     if (!clearResult.IsCompliant)
@@ -218,8 +218,8 @@ namespace StairsPlugin
                             $"射线探测结果：\n  {stepInfo}\n  {landingInfo}\n\n" +
                             "选\"是\"将忽略净空预警并继续生成；\n" +
                             "选\"否\"将中止生成，请调整参数后重试。";
-                        td.CommonButtons   = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No;
-                        td.DefaultButton   = TaskDialogResult.No; // 默认选"否"，更安全
+                        td.CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No;
+                        td.DefaultButton = TaskDialogResult.No; // 默认选"否"，更安全
 
                         // 用户选"否"（或关闭对话框），直接中止，不产生任何模型修改
                         if (td.Show() != TaskDialogResult.Yes)
@@ -249,7 +249,7 @@ namespace StairsPlugin
                 // ════════════════════════════════════════════════════════
 
                 ElementId stairsId = ElementId.InvalidElementId;
-                ElementId run1Id   = ElementId.InvalidElementId;
+                ElementId run1Id = ElementId.InvalidElementId;
 
                 using (var scope = new StairsEditScope(doc, "自动生成双跑楼梯"))
                 {
@@ -261,6 +261,27 @@ namespace StairsPlugin
                         tx.Start();
 
                         Stairs stairs = doc.GetElement(stairsId) as Stairs;
+
+                        // ── 切换楼梯族类型（必须在设置参数之前执行）────────────
+                        // ChangeTypeId 会将楼梯切换为用户在界面选中的族类型，
+                        // 并重置该类型的默认参数；因此后续的参数赋值将覆盖默认值，
+                        // 顺序不可颠倒。
+                        // 若 selectedStairsTypeName 为空（项目中无楼梯族）则跳过，
+                        // 保持 scope.Start 自动选取的默认类型。
+                        string selectedStairsTypeName = vm.SelectedStairsTypeName;
+                        if (!string.IsNullOrEmpty(selectedStairsTypeName))
+                        {
+                            StairsType targetStairsType = new FilteredElementCollector(doc)
+                                .OfClass(typeof(StairsType))
+                                .Cast<StairsType>()
+                                .FirstOrDefault(st => st.Name == selectedStairsTypeName);
+
+                            if (targetStairsType != null)
+                                stairs.ChangeTypeId(targetStairsType.Id);
+                            // targetStairsType == null：名称在文档中已不存在（族被删除），
+                            // 保持默认类型，不报错，由后续生成完成汇报提示。
+                        }
+
                         // 设置总踢面数（= TotalSteps + 2，含首尾踢面）
                         stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS)
                               .Set(calcResult.TotalSteps + 2);
@@ -270,23 +291,23 @@ namespace StairsPlugin
 
                         // ── 预计算各段几何参数 ───────────────────────────────
                         double run1HeightFt = (calcResult.Run1Steps + 1) * riserFt; // run1 爬升高度
-                        double run1Length   = calcResult.Run1Steps * treadDepthFt;  // run1 水平长度
-                        double run2Length   = calcResult.Run2Steps * treadDepthFt;  // run2 水平长度
+                        double run1Length = calcResult.Run1Steps * treadDepthFt;  // run1 水平长度
+                        double run2Length = calcResult.Run2Steps * treadDepthFt;  // run2 水平长度
 
                         // halfY：梯段中心线到楼梯整体中轴的横向半距
                         double halfY = (wellWidthFt + runWidthFt) / 2.0;
                         // 两跑的局部 Y 坐标（符号由盘旋方向决定）
                         double run1Y = clockwise ? -halfY : halfY;
-                        double run2Y = clockwise ?  halfY : -halfY;
+                        double run2Y = clockwise ? halfY : -halfY;
 
                         // ── 局部坐标系中的梯段端点 ─────────────────────────────
                         // Run1：从局部原点（X=0）沿 +X 方向爬升到 run1Length，Z=0
                         // Run2：从平台端（X=run2Length）沿 -X 方向爬升到 X=0，
                         //       Z=run1HeightFt（平台顶相对局部原点的高差）
-                        XYZ run1LocalStart = new XYZ(0,          run1Y, 0);
-                        XYZ run1LocalEnd   = new XYZ(run1Length,  run1Y, 0);
-                        XYZ run2LocalStart = new XYZ(run2Length,  run2Y, run1HeightFt);
-                        XYZ run2LocalEnd   = new XYZ(0,           run2Y, run1HeightFt);
+                        XYZ run1LocalStart = new XYZ(0, run1Y, 0);
+                        XYZ run1LocalEnd = new XYZ(run1Length, run1Y, 0);
+                        XYZ run2LocalStart = new XYZ(run2Length, run2Y, run1HeightFt);
+                        XYZ run2LocalEnd = new XYZ(0, run2Y, run1HeightFt);
 
                         // ── 将局部坐标变换到 Revit 世界坐标 ─────────────────────
                         // 使用 CoordinateTransform.CreateStairTransform 替代原先内联的矩阵乘法，
@@ -295,9 +316,9 @@ namespace StairsPlugin
                             insertionPtCorrected, angleRad);
 
                         XYZ run1Start = transform.OfPoint(run1LocalStart);
-                        XYZ run1End   = transform.OfPoint(run1LocalEnd);
+                        XYZ run1End = transform.OfPoint(run1LocalEnd);
                         XYZ run2Start = transform.OfPoint(run2LocalStart);
-                        XYZ run2End   = transform.OfPoint(run2LocalEnd);
+                        XYZ run2End = transform.OfPoint(run2LocalEnd);
 
                         // ── 创建第一跑（StairsRun）──────────────────────────────
                         // CreateStraightRun 以直线中心轴创建直跑梯段，
@@ -476,11 +497,17 @@ namespace StairsPlugin
 
                 // ── 生成完成汇报 ────────────────────────────────────────────
                 // 从 Revit 模型读取最终生成结果（含 Revit 自动修正后的实际值）
-                Stairs    newStairs = doc.GetElement(stairsId) as Stairs;
-                StairsRun finalRun  = doc.GetElement(run1Id)   as StairsRun;
+                Stairs newStairs = doc.GetElement(stairsId) as Stairs;
+                StairsRun finalRun = doc.GetElement(run1Id) as StairsRun;
+
+                // 读取最终生效的楼梯族类型名称（ChangeTypeId 成功时与用户选择一致；
+                // 失败时为 scope.Start 默认类型，名称可能与 vm.SelectedStairsTypeName 不同）
+                string actualStairsTypeName = (doc.GetElement(newStairs.GetTypeId()) as StairsType)?.Name
+                                              ?? "（未知）";
 
                 TaskDialog.Show("生成完成",
                     $"楼梯 ID：{newStairs.Id.IntegerValue}\n" +
+                    $"楼梯族类型：{actualStairsTypeName}\n" +
                     $"起始标高：{baseLevel.Name}  终止标高：{topLevel.Name}\n" +
                     $"总踏步数：{newStairs.ActualRisersNumber} 级\n" +
                     $"踢面高：{UnitConverter.FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
