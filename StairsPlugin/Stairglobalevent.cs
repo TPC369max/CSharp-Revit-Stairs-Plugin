@@ -282,12 +282,22 @@ namespace StairsPlugin
                             // 保持默认类型，不报错，由后续生成完成汇报提示。
                         }
 
-                        // 设置总踢面数（= TotalSteps + 2，含首尾踢面）
-                        stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS)
-                              .Set(calcResult.TotalSteps + 2);
-                        // 设置踏步水平深度（英尺）
-                        stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH)
-                              .Set(treadDepthFt);
+                        // ── 安全写入踢面数 ──────────────────────────────────────
+                        // 大多数楼梯族类型此参数均可写；防御性检查以兼容特殊类型。
+                        var desiredRisersParam =
+                            stairs.get_Parameter(BuiltInParameter.STAIRS_DESIRED_NUMBER_OF_RISERS);
+                        if (desiredRisersParam != null && !desiredRisersParam.IsReadOnly)
+                            desiredRisersParam.Set(calcResult.TotalSteps + 2);
+
+                        // ── 安全写入踏步深度 ─────────────────────────────────────
+                        // STAIRS_ACTUAL_TREAD_DEPTH 在"整体浇筑楼梯"中为只读参数
+                        // （踏步深度由 CreateStraightRun 的端点间距几何决定，不可单独设置）；
+                        // 直接调用 .Set() 会抛出"参数只读"异常，导致事务回滚。
+                        // 对可写类型（如组合楼梯）仍正常写入；只读时跳过，不影响几何精度。
+                        var treadDepthParam =
+                            stairs.get_Parameter(BuiltInParameter.STAIRS_ACTUAL_TREAD_DEPTH);
+                        if (treadDepthParam != null && !treadDepthParam.IsReadOnly)
+                            treadDepthParam.Set(treadDepthFt);
 
                         // ── 预计算各段几何参数 ───────────────────────────────
                         double run1HeightFt = (calcResult.Run1Steps + 1) * riserFt; // run1 爬升高度
@@ -420,7 +430,13 @@ namespace StairsPlugin
                         }
 
                         TaskDialog.Show("可写 Double 参数", sb.ToString());
-                        tx.Commit();
+
+                        // 内层事务同样附加失败预处理器：
+                        // 预制楼梯的组件尺寸兼容性警告发生在 tx.Commit() 而非 scope.Commit()，
+                        // 若不在此处拦截，警告弹窗会打断生成流程。
+                        var txFailOpts = tx.GetFailureHandlingOptions();
+                        txFailOpts.SetFailuresPreprocessor(new StairsFailurePreprocessor());
+                        tx.Commit(txFailOpts);
                     }
 
                     // scope.Commit 使用 StairsFailurePreprocessor 静默处理警告，避免弹窗中断
