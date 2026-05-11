@@ -6,6 +6,7 @@ using StairsPlugin.Utils;
 using StairsPlugin.ViewModel;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Data;
@@ -403,14 +404,14 @@ namespace StairsPlugin
                         landingLoop.Append(Line.CreateBound(c1, c2));
                         landingLoop.Append(Line.CreateBound(c2, c3));
                         landingLoop.Append(Line.CreateBound(c3, c0));
-
+                        
                         // ── 创建草图平台 ─────────────────────────────────────────
                         StairsLanding landing = StairsLanding.CreateSketchedLanding(
                             doc,
                             stairsId,
                             landingLoop,
                             landingElevFt);
-
+                        
                         // ── 调试信息：打印平台可写 Double 参数（开发期辅助，生产可移除）──
                         var sb = new StringBuilder();
                         sb.AppendLine($"=== StairsLanding {landing.Id} 可写参数 ===\n");
@@ -430,7 +431,7 @@ namespace StairsPlugin
                         }
 
                         TaskDialog.Show("可写 Double 参数", sb.ToString());
-
+                        
                         // 内层事务同样附加失败预处理器：
                         // 预制楼梯的组件尺寸兼容性警告发生在 tx.Commit() 而非 scope.Commit()，
                         // 若不在此处拦截，警告弹窗会打断生成流程。
@@ -529,12 +530,96 @@ namespace StairsPlugin
                     $"踢面高：{UnitConverter.FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
                     $"梯段净宽：{UnitConverter.FtToMm(finalRun.ActualRunWidth):F0} mm\n" +
                     $"方向角 θ = {angleRad * 180 / Math.PI:F1}°");
+
+                // 生成完成后导出拓扑节点（追加到 Execute 尾部）
+                var topoNodes = StairTopologyExtractor.Extract(doc);
+                var spaceNodes = StairTopologyExtractor.ExtractSpaces(doc);
+
+                string json = BuildTopologyJson(topoNodes, spaceNodes);
+
+
+                string outputPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    "stair_topology.json");
+                File.WriteAllText(outputPath, json);
+                TaskDialog.Show("导出完成", $"拓扑节点已导出：\n{outputPath}");
             }
             catch (Exception ex)
             {
                 // 捕获所有未预期异常，以 TaskDialog 形式展示而非让 Revit 崩溃报告
                 TaskDialog.Show("生成失败", ex.Message);
             }
+
+
+        }
+
+        /// <summary>
+        /// 手动序列化拓扑节点为 JSON 字符串，无需 Newtonsoft 或 System.Text.Json。
+        /// 使用 StringBuilder 拼接，与 .NET Framework 4.x（Revit 插件常用环境）完全兼容。
+        /// </summary>
+        private static string BuildTopologyJson(
+            List<StairTopologyNode> stairs,
+            List<SpaceNode> spaces)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("{");
+
+            // ── stairs 数组 ───────────────────────────────────────────
+            sb.AppendLine("  \"stairs\": [");
+            for (int i = 0; i < stairs.Count; i++)
+            {
+                var s = stairs[i];
+                sb.AppendLine("    {");
+                sb.AppendLine($"      \"StairElementId\": {s.StairElementId},");
+                sb.AppendLine($"      \"BottomFloorName\": \"{Escape(s.BottomFloorName)}\",");
+                sb.AppendLine($"      \"TopFloorName\": \"{Escape(s.TopFloorName)}\",");
+                sb.AppendLine($"      \"BottomElevMm\": {s.BottomElevMm:F3},");
+                sb.AppendLine($"      \"TopElevMm\": {s.TopElevMm:F3},");
+                sb.AppendLine($"      \"EntryX\": {s.EntryX:F3},");
+                sb.AppendLine($"      \"EntryY\": {s.EntryY:F3},");
+                sb.AppendLine($"      \"EntryZ\": {s.EntryZ:F3},");
+                sb.AppendLine($"      \"ExitX\": {s.ExitX:F3},");
+                sb.AppendLine($"      \"ExitY\": {s.ExitY:F3},");
+                sb.AppendLine($"      \"ExitZ\": {s.ExitZ:F3},");
+                sb.AppendLine($"      \"PathLengthMm\": {s.PathLengthMm:F3}");
+                // 最后一项不加逗号
+                sb.Append(i < stairs.Count - 1 ? "    }," : "    }");
+                sb.AppendLine();
+            }
+            sb.AppendLine("  ],");
+
+            // ── spaces 数组 ───────────────────────────────────────────
+            sb.AppendLine("  \"spaces\": [");
+            for (int i = 0; i < spaces.Count; i++)
+            {
+                var sp = spaces[i];
+                sb.AppendLine("    {");
+                sb.AppendLine($"      \"SpaceId\": {sp.SpaceId},");
+                sb.AppendLine($"      \"SpaceName\": \"{Escape(sp.SpaceName)}\",");
+                sb.AppendLine($"      \"FloorName\": \"{Escape(sp.FloorName)}\",");
+                sb.AppendLine($"      \"CenterX\": {sp.CenterX:F3},");
+                sb.AppendLine($"      \"CenterY\": {sp.CenterY:F3},");
+                sb.AppendLine($"      \"ElevMm\": {sp.ElevMm:F3}");
+                sb.Append(i < spaces.Count - 1 ? "    }," : "    }");
+                sb.AppendLine();
+            }
+            sb.AppendLine("  ]");
+
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 转义 JSON 字符串中的特殊字符，防止中文名称或特殊符号破坏 JSON 结构。
+        /// </summary>
+        private static string Escape(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return "";
+            return s.Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"")
+                    .Replace("\n", "\\n")
+                    .Replace("\r", "\\r");
         }
     }
 }
