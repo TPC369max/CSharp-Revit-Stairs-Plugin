@@ -81,7 +81,7 @@ namespace StairsPlugin.Model
                 var points = new List<double[]>
                 {
                     new double[] { UnitConverter.FtToMm(p0Raw.X), UnitConverter.FtToMm(p0Raw.Y), baseLevelElevMm },
-                    new double[] { UnitConverter.FtToMm(p1Raw.X), UnitConverter.FtToMm(p1Raw.Y), UnitConverter.FtToMm(p2Raw.Z) },
+                    new double[] { UnitConverter.FtToMm(p1Raw.X), UnitConverter.FtToMm(p1Raw.Y), UnitConverter.FtToMm(p1Raw.Z) },
                     new double[] { UnitConverter.FtToMm(p2Raw.X), UnitConverter.FtToMm(p2Raw.Y), UnitConverter.FtToMm(p2Raw.Z) },
                     new double[] { UnitConverter.FtToMm(p3Raw.X), UnitConverter.FtToMm(p3Raw.Y), topLevelElevMm  },
                 };
@@ -130,13 +130,25 @@ namespace StairsPlugin.Model
         // ================================================================
         //  3. 提取分析路径（同层连通线）
         //
-        //  修复说明：
-        //    PathOfTravel 元素的 Element.LevelId 属性在部分版本 / 工作集模型中
-        //    返回 ElementId.InvalidElementId，导致标高查询失败、Z 值为 0。
-        //    修复策略（按优先级依次尝试）：
-        //      ① Element.LevelId（原逻辑）
-        //      ② BuiltInParameter.LEVEL_PARAM 参数
-        //      ③ 几何点的实际 Z 坐标（最终兜底）
+        //  Bug 修复说明（三处叠加缺陷）：
+        //
+        //  ① 仅判断 `is Line`，漏掉其他 Curve 子类（Arc、NurbSpline 等）
+        //     → 改为 `is Curve`，统一取 GetEndPoint(0/1)。
+        //
+        //  ② `if (points.Count == 0)` 假设几何对象按行进顺序迭代：
+        //     只有第一个对象的起点被收录，后续对象仅收终点。
+        //     若 Revit 以非顺序返回线段，中间节点的起点被静默丢弃，
+        //     导致每条路径恰好少 1 个点（= 最先被跳过的那段起点）。
+        //     → 改为"收集所有线段端点对 → 按连通性重新链接"，
+        //       与迭代顺序无关。
+        //
+        //  ③ 未处理 GeometryInstance：若路径几何被包在实例对象中，
+        //     整个对象被静默跳过，points 为空，路径被丢弃。
+        //     → 递归展开 GeometryInstance.GetInstanceGeometry()。
+        //
+        //  标高修复（沿用上一版本策略）：
+        //    PathOfTravel 元素的 Element.LevelId 在部分版本返回 InvalidElementId，
+        //    依次尝试 ① LevelId ② LEVEL_PARAM 参数 ③ 几何点 Z 均值兜底。
         // ================================================================
         public static List<PathNode> ExtractPaths(Document doc)
         {
@@ -150,45 +162,36 @@ namespace StairsPlugin.Model
             {
                 // ── 多级标高查找 ──────────────────────────────────────────
                 Level level = ResolveLevel(doc, pathEle);
-
-                // zElevMm：如果成功找到标高就用标高高程，否则留 null 等几何兜底
                 double? forcedZMm = level != null
                     ? (double?)UnitConverter.FtToMm(level.Elevation)
                     : null;
 
                 double lengthFt = pathEle.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0;
 
-                // ── 提取几何折线顶点 ──────────────────────────────────────
-                var points = new List<XYZ>();
-                GeometryElement geomElem = pathEle.get_Geometry(new Options());
+                // ── Step 1：收集所有线段端点对（与迭代顺序无关）────────────
+                // 每条线段存为 (startXYZ, endXYZ) 存入两个平行列表，
+                // 支持 Curve 所有子类及 PolyLine、GeometryInstance 包装。
+                var segStarts = new List<XYZ>();
+                var segEnds = new List<XYZ>();
 
+                GeometryElement geomElem = pathEle.get_Geometry(new Options());
                 if (geomElem != null)
                 {
                     foreach (GeometryObject geomObj in geomElem)
-                    {
-                        if (geomObj is Line line)
-                        {
-                            if (points.Count == 0)
-                                points.Add(line.GetEndPoint(0));
-                            points.Add(line.GetEndPoint(1));
-                        }
-                        else if (geomObj is PolyLine polyLine)
-                        {
-                            points.AddRange(polyLine.GetCoordinates());
-                        }
-                    }
+                        CollectSegments(geomObj, segStarts, segEnds);
                 }
 
+                if (segStarts.Count == 0)
+                    continue;
+
+                // ── Step 2：按连通性链接线段，得到有序折线点列表 ─────────
+                List<XYZ> points = ChainPath(segStarts, segEnds);
                 if (points.Count < 2)
                     continue;
 
-                // ── 几何 Z 兜底：若标高查找失败，取所有点 Z 的平均值 ────
-                // PathOfTravel 路径理论上共面，均值与任一点接近；平均更健壮。
+                // ── Z 兜底：标高未找到时取几何点 Z 的平均值 ───────────────
                 if (forcedZMm == null)
-                {
-                    double avgZFt = points.Average(p => p.Z);
-                    forcedZMm = UnitConverter.FtToMm(avgZFt);
-                }
+                    forcedZMm = UnitConverter.FtToMm(points.Average(p => p.Z));
 
                 result.Add(new PathNode
                 {
@@ -204,6 +207,107 @@ namespace StairsPlugin.Model
                     }).ToList()
                 });
             }
+            return result;
+        }
+
+        // ----------------------------------------------------------------
+        //  辅助：递归收集几何对象中的所有曲线线段端点对
+        //
+        //  处理：
+        //    • Curve（Line/Arc/NurbSpline 等所有子类）→ 取两端点
+        //    • PolyLine → 拆解为每段的端点对
+        //    • GeometryInstance → 递归展开 GetInstanceGeometry()
+        //  其余类型（Solid、Mesh 等）静默跳过。
+        // ----------------------------------------------------------------
+        private static void CollectSegments(
+            GeometryObject geomObj,
+            List<XYZ> starts,
+            List<XYZ> ends)
+        {
+            if (geomObj is Curve curve)
+            {
+                // Line 是 Curve 子类，同样命中此分支
+                starts.Add(curve.GetEndPoint(0));
+                ends.Add(curve.GetEndPoint(1));
+            }
+            else if (geomObj is PolyLine polyLine)
+            {
+                IList<XYZ> coords = polyLine.GetCoordinates();
+                for (int i = 0; i < coords.Count - 1; i++)
+                {
+                    starts.Add(coords[i]);
+                    ends.Add(coords[i + 1]);
+                }
+            }
+            else if (geomObj is GeometryInstance gi)
+            {
+                // 展开实例几何，递归处理每个子对象
+                foreach (GeometryObject inner in gi.GetInstanceGeometry())
+                    CollectSegments(inner, starts, ends);
+            }
+            // Solid / Mesh / 其他 → 与路径拓扑无关，跳过
+        }
+
+        // ----------------------------------------------------------------
+        //  辅助：将无序线段端点对链接为有序折线顶点列表
+        //
+        //  算法：
+        //    1. 找路径起点：在所有 starts 中，不被任何 end 覆盖的点即为起点；
+        //       若无法确定（环形路径或单线段），退化为第一个线段。
+        //    2. 从起点出发，每步在未使用线段中寻找 start ≈ 当前 end 的线段，
+        //       依次追加终点，直到无后继为止。
+        //
+        //  容差：0.001 ft（≈ 0.3 mm），足以吸收浮点误差，不会误合并相邻节点。
+        // ----------------------------------------------------------------
+        private static List<XYZ> ChainPath(List<XYZ> starts, List<XYZ> ends)
+        {
+            const double tolFt = 0.001; // ≈ 0.3 mm
+            int n = starts.Count;
+            var used = new bool[n];
+
+            // 找起始线段索引（其 start 不是任何其他线段的 end）
+            int firstIdx = 0;
+            for (int i = 0; i < n; i++)
+            {
+                bool coveredByEnd = false;
+                for (int j = 0; j < n; j++)
+                {
+                    if (ends[j].DistanceTo(starts[i]) < tolFt)
+                    {
+                        coveredByEnd = true;
+                        break;
+                    }
+                }
+                if (!coveredByEnd)
+                {
+                    firstIdx = i;
+                    break;
+                }
+            }
+
+            // 从起始线段出发，按连通性链接
+            var result = new List<XYZ>();
+            int cur = firstIdx;
+            while (cur >= 0 && cur < n && !used[cur])
+            {
+                used[cur] = true;
+                if (result.Count == 0)
+                    result.Add(starts[cur]); // 第一段：加起点 + 终点
+                result.Add(ends[cur]);
+
+                // 在未使用线段中找下一段（其 start ≈ 当前 end）
+                int next = -1;
+                for (int i = 0; i < n; i++)
+                {
+                    if (!used[i] && starts[i].DistanceTo(ends[cur]) < tolFt)
+                    {
+                        next = i;
+                        break;
+                    }
+                }
+                cur = next;
+            }
+
             return result;
         }
 
