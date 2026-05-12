@@ -557,6 +557,13 @@ namespace StairsPlugin
         /// <summary>
         /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串 (兼容 C# 7.3 及更低版本)
         /// </summary>
+        /// <summary>
+        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串 (兼容 C# 7.3 及更低版本)
+        ///
+        /// 楼梯 Feature 现在输出 4 个航点（底层入口 → 平台入口 → 平台出口 → 顶层出口），
+        /// 单跑楼梯退化为 2 点；坐标均由 StairTopologyNode.Points 提供，
+        /// 不再使用旧的 EntryX/Y/Z / ExitX/Y/Z 字段。
+        /// </summary>
         private static string BuildGeoJson(
             List<StairTopologyNode> stairs,
             List<SpaceNode> spaces,
@@ -574,7 +581,6 @@ namespace StairsPlugin
             {
                 double pseudoLon = sp.CenterX * 0.00001;
                 double pseudoLat = sp.CenterY * 0.00001;
-                // 使用常规 $"" 插值，花括号用 {{ 和 }} 转义，双引号用 \" 转义
                 string feat = $"{{\n" +
                               $"  \"type\": \"Feature\",\n" +
                               $"  \"geometry\": {{ \"type\": \"Point\", \"coordinates\": [{pseudoLon:F6}, {pseudoLat:F6}, {sp.ElevMm:F1}] }},\n" +
@@ -586,7 +592,8 @@ namespace StairsPlugin
             // 2. 同层路径线 (LineString)
             foreach (var pt in paths)
             {
-                var coords = string.Join(", ", pt.Points.Select(p => $"[{p[0] * 0.00001:F6}, {p[1] * 0.00001:F6}, {p[2]:F1}]"));
+                var coords = string.Join(", ",
+                    pt.Points.Select(p => $"[{p[0] * 0.00001:F6}, {p[1] * 0.00001:F6}, {p[2]:F1}]"));
                 string feat = $"{{\n" +
                               $"  \"type\": \"Feature\",\n" +
                               $"  \"geometry\": {{ \"type\": \"LineString\", \"coordinates\": [{coords}] }},\n" +
@@ -595,10 +602,17 @@ namespace StairsPlugin
                 featureJsons.Add(feat);
             }
 
-            // 3. 楼梯跨层连接线 (LineString)
+            // 3. 楼梯跨层连接线 (LineString，4 航点)
+            //    Points 列表已由 StairTopologyExtractor 保证至少含 2 点，
+            //    单跑 = 2 点，双跑 U 形 = 4 点。
             foreach (var st in stairs)
             {
-                string coords = $"[{st.EntryX * 0.00001:F6}, {st.EntryY * 0.00001:F6}, {st.EntryZ:F1}], [{st.ExitX * 0.00001:F6}, {st.ExitY * 0.00001:F6}, {st.ExitZ:F1}]";
+                if (st.Points == null || st.Points.Count < 2)
+                    continue;
+
+                var coords = string.Join(", ",
+                    st.Points.Select(p => $"[{p[0] * 0.00001:F6}, {p[1] * 0.00001:F6}, {p[2]:F1}]"));
+
                 string feat = $"{{\n" +
                               $"  \"type\": \"Feature\",\n" +
                               $"  \"geometry\": {{ \"type\": \"LineString\", \"coordinates\": [{coords}] }},\n" +
@@ -612,6 +626,8 @@ namespace StairsPlugin
             return sb.ToString();
         }
 
-        private static string Escape(string s) => string.IsNullOrEmpty(s) ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        private static string Escape(string s)
+            => string.IsNullOrEmpty(s) ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
     }
 }
