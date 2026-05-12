@@ -530,96 +530,88 @@ namespace StairsPlugin
                     $"踢面高：{UnitConverter.FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
                     $"梯段净宽：{UnitConverter.FtToMm(finalRun.ActualRunWidth):F0} mm\n" +
                     $"方向角 θ = {angleRad * 180 / Math.PI:F1}°");
+                // ... (保留你原有的 Execute() 前半部分代码不变) ...
 
-                // 生成完成后导出拓扑节点（追加到 Execute 尾部）
-                var topoNodes = StairTopologyExtractor.Extract(doc);
-                var spaceNodes = StairTopologyExtractor.ExtractSpaces(doc);
+                // ==== 替换 Execute() 最后的导出代码 ====
+                var stairsTopo = StairTopologyExtractor.Extract(doc);
+                var spacesTopo = StairTopologyExtractor.ExtractSpaces(doc);
+                var pathsTopo = StairTopologyExtractor.ExtractPaths(doc);
 
-                string json = BuildTopologyJson(topoNodes, spaceNodes);
-
+                string geoJson = BuildGeoJson(stairsTopo, spacesTopo, pathsTopo);
 
                 string outputPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "stair_topology.json");
-                File.WriteAllText(outputPath, json);
-                TaskDialog.Show("导出完成", $"拓扑节点已导出：\n{outputPath}");
+                    "indoor_network.geojson"); // 必须使用 .geojson 后缀
+                File.WriteAllText(outputPath, geoJson, Encoding.UTF8);
+                TaskDialog.Show("导出完成", $"室内网络 GeoJSON 已导出：\n{outputPath}\n请直接拖入 kepler.gl 查看。");
             }
             catch (Exception ex)
             {
-                // 捕获所有未预期异常，以 TaskDialog 形式展示而非让 Revit 崩溃报告
                 TaskDialog.Show("生成失败", ex.Message);
             }
-
-
         }
 
         /// <summary>
-        /// 手动序列化拓扑节点为 JSON 字符串，无需 Newtonsoft 或 System.Text.Json。
-        /// 使用 StringBuilder 拼接，与 .NET Framework 4.x（Revit 插件常用环境）完全兼容。
+        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串
         /// </summary>
-        private static string BuildTopologyJson(
+        /// <summary>
+        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串 (兼容 C# 7.3 及更低版本)
+        /// </summary>
+        private static string BuildGeoJson(
             List<StairTopologyNode> stairs,
-            List<SpaceNode> spaces)
+            List<SpaceNode> spaces,
+            List<PathNode> paths)
         {
             var sb = new StringBuilder();
             sb.AppendLine("{");
+            sb.AppendLine("  \"type\": \"FeatureCollection\",");
+            sb.AppendLine("  \"features\": [");
 
-            // ── stairs 数组 ───────────────────────────────────────────
-            sb.AppendLine("  \"stairs\": [");
-            for (int i = 0; i < stairs.Count; i++)
+            List<string> featureJsons = new List<string>();
+
+            // 1. 房间节点 (Point)
+            foreach (var sp in spaces)
             {
-                var s = stairs[i];
-                sb.AppendLine("    {");
-                sb.AppendLine($"      \"StairElementId\": {s.StairElementId},");
-                sb.AppendLine($"      \"BottomFloorName\": \"{Escape(s.BottomFloorName)}\",");
-                sb.AppendLine($"      \"TopFloorName\": \"{Escape(s.TopFloorName)}\",");
-                sb.AppendLine($"      \"BottomElevMm\": {s.BottomElevMm:F3},");
-                sb.AppendLine($"      \"TopElevMm\": {s.TopElevMm:F3},");
-                sb.AppendLine($"      \"EntryX\": {s.EntryX:F3},");
-                sb.AppendLine($"      \"EntryY\": {s.EntryY:F3},");
-                sb.AppendLine($"      \"EntryZ\": {s.EntryZ:F3},");
-                sb.AppendLine($"      \"ExitX\": {s.ExitX:F3},");
-                sb.AppendLine($"      \"ExitY\": {s.ExitY:F3},");
-                sb.AppendLine($"      \"ExitZ\": {s.ExitZ:F3},");
-                sb.AppendLine($"      \"PathLengthMm\": {s.PathLengthMm:F3}");
-                // 最后一项不加逗号
-                sb.Append(i < stairs.Count - 1 ? "    }," : "    }");
-                sb.AppendLine();
+                double pseudoLon = sp.CenterX * 0.00001;
+                double pseudoLat = sp.CenterY * 0.00001;
+                // 使用常规 $"" 插值，花括号用 {{ 和 }} 转义，双引号用 \" 转义
+                string feat = $"{{\n" +
+                              $"  \"type\": \"Feature\",\n" +
+                              $"  \"geometry\": {{ \"type\": \"Point\", \"coordinates\": [{pseudoLon:F6}, {pseudoLat:F6}, {sp.ElevMm:F1}] }},\n" +
+                              $"  \"properties\": {{ \"type\": \"room\", \"name\": \"{Escape(sp.SpaceName)}\", \"level\": \"{Escape(sp.FloorName)}\", \"area\": {sp.Area:F1} }}\n" +
+                              $"}}";
+                featureJsons.Add(feat);
             }
-            sb.AppendLine("  ],");
 
-            // ── spaces 数组 ───────────────────────────────────────────
-            sb.AppendLine("  \"spaces\": [");
-            for (int i = 0; i < spaces.Count; i++)
+            // 2. 同层路径线 (LineString)
+            foreach (var pt in paths)
             {
-                var sp = spaces[i];
-                sb.AppendLine("    {");
-                sb.AppendLine($"      \"SpaceId\": {sp.SpaceId},");
-                sb.AppendLine($"      \"SpaceName\": \"{Escape(sp.SpaceName)}\",");
-                sb.AppendLine($"      \"FloorName\": \"{Escape(sp.FloorName)}\",");
-                sb.AppendLine($"      \"CenterX\": {sp.CenterX:F3},");
-                sb.AppendLine($"      \"CenterY\": {sp.CenterY:F3},");
-                sb.AppendLine($"      \"ElevMm\": {sp.ElevMm:F3}");
-                sb.Append(i < spaces.Count - 1 ? "    }," : "    }");
-                sb.AppendLine();
+                var coords = string.Join(", ", pt.Points.Select(p => $"[{p[0] * 0.00001:F6}, {p[1] * 0.00001:F6}, {p[2]:F1}]"));
+                string feat = $"{{\n" +
+                              $"  \"type\": \"Feature\",\n" +
+                              $"  \"geometry\": {{ \"type\": \"LineString\", \"coordinates\": [{coords}] }},\n" +
+                              $"  \"properties\": {{ \"type\": \"path\", \"level\": \"{Escape(pt.LevelName)}\", \"length\": {pt.LengthMm:F1} }}\n" +
+                              $"}}";
+                featureJsons.Add(feat);
             }
-            sb.AppendLine("  ]");
 
-            sb.AppendLine("}");
+            // 3. 楼梯跨层连接线 (LineString)
+            foreach (var st in stairs)
+            {
+                string coords = $"[{st.EntryX * 0.00001:F6}, {st.EntryY * 0.00001:F6}, {st.EntryZ:F1}], [{st.ExitX * 0.00001:F6}, {st.ExitY * 0.00001:F6}, {st.ExitZ:F1}]";
+                string feat = $"{{\n" +
+                              $"  \"type\": \"Feature\",\n" +
+                              $"  \"geometry\": {{ \"type\": \"LineString\", \"coordinates\": [{coords}] }},\n" +
+                              $"  \"properties\": {{ \"type\": \"stair\", \"from\": \"{Escape(st.BottomFloorName)}\", \"to\": \"{Escape(st.TopFloorName)}\" }}\n" +
+                              $"}}";
+                featureJsons.Add(feat);
+            }
+
+            sb.Append(string.Join(",\n", featureJsons));
+            sb.AppendLine("\n  ]\n}");
             return sb.ToString();
         }
 
-        /// <summary>
-        /// 转义 JSON 字符串中的特殊字符，防止中文名称或特殊符号破坏 JSON 结构。
-        /// </summary>
-        private static string Escape(string s)
-        {
-            if (string.IsNullOrEmpty(s))
-                return "";
-            return s.Replace("\\", "\\\\")
-                    .Replace("\"", "\\\"")
-                    .Replace("\n", "\\n")
-                    .Replace("\r", "\\r");
-        }
+        private static string Escape(string s) => string.IsNullOrEmpty(s) ? "" : s.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }
