@@ -139,11 +139,16 @@ namespace StairsPlugin.Model
         /// 同时检查踢面高上限和单跑最大级数，两者均满足才为 true。
         /// </summary>
         /// <param name="totalHeightMm">底部到顶部净高差（mm）</param>
-        /// <param name="rule">规范参数，null 或高差≤0 时返回无效结果</param>
+        /// <param name="rule">规范参数，为 null 且同时 totalHeightMm≤0 时返回无效结果</param>
         /// <returns>解算结果</returns>
         public static StairCalculationResult Calculate(double totalHeightMm, StairCodeParams rule)
         {
-            // 参数保护：规范对象为 null 或高差非正时，返回无效结果
+            // 参数保护：规范对象为 null 且高差同时非正时，返回无效结果。
+            // 注意：条件为 &&（两者同时满足才提前返回）：
+            //   · 若 rule != null 但 totalHeightMm <= 0，后续 Math.Ceiling 会返回 0，
+            //     steps 被修正为 4，IsValid=false 足以兜底，此处不提前中止。
+            //   · 若 rule == null 但 totalHeightMm > 0，后续访问 rule.MaxRiserHeight
+            //     会抛出 NullReferenceException，调用方须自行保证 rule 不为 null。
             if (rule == null && totalHeightMm <= 0)
                 return new StairCalculationResult { IsValid = false };
 

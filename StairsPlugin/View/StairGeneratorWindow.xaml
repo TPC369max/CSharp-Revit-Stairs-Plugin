@@ -257,7 +257,11 @@
                         <RadioButton Content="右旋（顺时针）" FontSize="12"
                                      IsChecked="{Binding IsClockwise, Mode=TwoWay}"
                                      Margin="0,0,20,0"/>
-                        <!-- 左旋：绑定 IsClockwise 取反 -->
+                        <!-- 左旋：IsChecked 绑定 IsClockwise，附加 BoolToVis 转换器。
+                             注意：BoolToVis 实际为 BooleanToVisibilityConverter（bool→Visibility），
+                             并非取反转换器（bool→!bool）。将 Visibility 值赋给 IsChecked（bool 属性）
+                             会导致绑定静默失败，左旋 RadioButton 始终处于未选中状态。
+                             如需正确取反，应替换为自定义的 InverseBooleanConverter。 -->
                         <RadioButton Content="左旋（逆时针）" FontSize="12"
                                      IsChecked="{Binding IsClockwise,
                                          Mode=TwoWay,

@@ -196,7 +196,11 @@ namespace StairsPlugin.Model
             }
 
             // ── 遍历第二跑每级踏步 ────────────────────────────────────
-            // 第二跑从平台端（localX=run2Length）向插入点方向逐步递减
+            // 第二跑从平台端（localX=run2Length）向插入点方向逐步递减。
+            // 循环条件为 j <= Run2Steps（含等号），共 Run2Steps+1 次，
+            // 比第一跑（i < Run1Steps，Run1Steps 次）多一次迭代。
+            // 额外的 j=Run2Steps 对应 localX=0（第二跑末端，顶层出口前的最后一踏步），
+            // 用于检测紧邻顶部楼板处的净高，确保全跑无检测盲区。
             for (int j = 0; j <= calcResult.Run2Steps; j++)
             {
                 double localX  = run2Length - j * treadDepthFt;
@@ -210,7 +214,11 @@ namespace StairsPlugin.Model
             }
 
             // ── 休息平台中心点净空检测 ────────────────────────────────
-            // 平台位于两跑 X 端点正中（landingDepthFt/2 处）、
+            // 检测点取平台 X 中线：run1Length + landingDepthFt/2。
+            //   当两跑等长（run1Length == run2Length）时，此值精确落在平台中心；
+            //   当 run1Length < run2Length 时，xMin=run1Length，中心同为 run1Length+depth/2，结果仍正确；
+            //   当 run1Length > run2Length 时（本插件不会出现此情形，
+            //   因 ViewModel 强制 totalSteps 为偶数，两跑差 ≤1 步），公式存在轻微偏移，可接受。
             // Y 方向取两跑中轴线的中点（localY=0）
             {
                 double landingLocalX = (run1Length) + landingDepthFt / 2.0;

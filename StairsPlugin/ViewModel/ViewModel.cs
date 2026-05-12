@@ -666,8 +666,16 @@ namespace StairsPlugin.ViewModel
 
         private bool _hasViolation = false;
         /// <summary>
-        /// 是否存在至少一条规范违规（Phase-1 或 Phase-2）。
-        /// true 时"生成"按钮禁用，并显示红色违规警告区域。
+        /// 是否存在至少一条 Phase-2 踏步解算违规。
+        ///
+        /// 【重要区分】
+        /// Phase-1 几何参数违规（梯段净宽/踏步宽/平台深度不足、总高无效）
+        /// 通过私有字段 hasGeometryViolation 单独控制按钮禁用，
+        /// 不进入本属性，仅靠各对应 Badge 的橙色提示告知用户。
+        ///
+        /// 本属性为 true 时同时：
+        ///   · 按钮通过 CanExecute 禁用（GenerateCommand 中引用）
+        ///   · 界面红色违规区域（HasViolation DataTrigger）变为可见
         /// </summary>
         public bool HasViolation
         {
@@ -692,7 +700,8 @@ namespace StairsPlugin.ViewModel
         ///   1. P1 已拾取
         ///   2. P2 已拾取
         ///   3. 无规范违规（!HasViolation）
-        ///   4. 无几何违规（!hasGeometryViolation，即梯段净宽/踏步宽/平台深度均合规）
+        ///   4. 无几何违规（!hasGeometryViolation，即梯段净宽/踏步宽/平台深度均合规，
+        ///      且顶部标高须高于底部标高+偏移量，即 !TotalHeightIsWarning）
         ///   5. 无输入错误（!HasInputError，即所有数值 TextBox 均可解析）
         /// </summary>
         public RelayCommand GenerateCommand
@@ -810,7 +819,7 @@ namespace StairsPlugin.ViewModel
         public bool TotalHeightIsWarning => totalMm <= 0;
 
         /// <summary>
-        /// 刷新总高显示和 HasViolation 基础状态。
+        /// 刷新总高显示（TotalHeightDisplay / TotalHeightIsWarning）。
         /// 在 Recalculate() 开头调用（Phase-1 入口）。
         /// 若标高无效或总高非正，清除预览并早返回。
         /// </summary>
@@ -971,7 +980,9 @@ namespace StairsPlugin.ViewModel
                 ClearPreview();
             }
 
-            // ── 汇总违规状态（Phase-1 + Phase-2 合并到 HasViolation）──────
+            // ── 汇总违规状态（仅 Phase-2 解算违规进入 HasViolation）────────
+            // Phase-1 几何违规（RunWidthOk/TreadDepthOk/LandingDepthOk/TotalHeightIsWarning）
+            // 已由 hasGeometryViolation 单独进入 GenerateCommand.CanExecute，不在此处合并。
             HasViolation  = collector.HasViolation || !TotalStepsOk || !ActualTreadOk || !RiserHeightOk;
             ViolationDetail = HasViolation ? collector.Detail : "";
             GenerateCommand.RaiseCanExecuteChanged();

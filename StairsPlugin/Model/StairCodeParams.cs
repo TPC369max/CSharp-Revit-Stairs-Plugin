@@ -25,7 +25,9 @@ namespace StairsPlugin.Model
         /// <summary>
         /// 踏步最小宽度 b（mm）。
         /// 即踏面（tread depth）的水平投影净尺寸，不含踢面厚度。
-        /// 规范要求：住宅/公共建筑均 ≥ 260 mm（GB55031-2022 表5.3.9）。
+        /// 规范要求（GB55031-2022 表5.3.9）：
+        ///   住宅 / 一般公共建筑 / 附属楼梯（多层/高层）均 ≥ 260 mm；
+        ///   附属楼梯（超高层）≥ 250 mm（稍宽松，见表5.3.9 第3行）。
         /// </summary>
         public double MinTreadDepth
         {

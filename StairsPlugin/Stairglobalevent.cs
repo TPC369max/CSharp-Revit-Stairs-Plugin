@@ -33,7 +33,9 @@ namespace StairsPlugin
     //       4. StairsEditScope 内：绘制梯段 + 草图平台（主事务）
     //       5. StairsEditScope 外：处理栏杆（独立事务）
     //       6. 整理临时标高名称（独立事务）
-    //       7. 弹窗汇报生成结果
+    //       7. 弹窗汇报生成结果（TaskDialog 展示实际踢面高、梯段宽、族类型等）
+    //       8. 提取室内拓扑网络（楼梯节点、房间空间、分析路径）
+    //          并将结果序列化为 GeoJSON，写入桌面 indoor_network.geojson
     //
     //  ── 净空校验时序说明 ──────────────────────────────────────────
     //  在 StairsEditScope 启动前执行净空预检，
@@ -410,28 +412,8 @@ namespace StairsPlugin
                             doc,
                             stairsId,
                             landingLoop,
-                            landingElevFt);
-                        
-                        // ── 调试信息：打印平台可写 Double 参数（开发期辅助，生产可移除）──
-                        var sb = new StringBuilder();
-                        sb.AppendLine($"=== StairsLanding {landing.Id} 可写参数 ===\n");
-                        sb.AppendLine($"平台底面高程：{UnitConverter.FtToMm(landingElevFt):F1} mm\n");
-                        sb.AppendLine($"平台轮廓（局部坐标，mm）：");
-                        sb.AppendLine($"  X [{UnitConverter.FtToMm(xMin):F1}, {UnitConverter.FtToMm(xMax):F1}]");
-                        sb.AppendLine($"  Y [{UnitConverter.FtToMm(yMin):F1}, {UnitConverter.FtToMm(yMax):F1}]\n");
-
-                        // 遍历所有可写 Double 参数（仅 Double 类型且非只读），供开发期验证
-                        foreach (Parameter p in landing.Parameters.Cast<Parameter>()
-                            .Where(p => p.StorageType == StorageType.Double && !p.IsReadOnly)
-                            .OrderBy(p => p.Definition.Name))
-                        {
-                            double valueMm = UnitUtils.ConvertFromInternalUnits(
-                                p.AsDouble(), UnitTypeId.Millimeters);
-                            sb.AppendLine($"[{p.Definition.Name}]  {valueMm:F1} mm");
-                        }
-
-                        TaskDialog.Show("可写 Double 参数", sb.ToString());
-                        
+                            landingElevFt);                      
+                     
                         // 内层事务同样附加失败预处理器：
                         // 预制楼梯的组件尺寸兼容性警告发生在 tx.Commit() 而非 scope.Commit()，
                         // 若不在此处拦截，警告弹窗会打断生成流程。
@@ -530,9 +512,7 @@ namespace StairsPlugin
                     $"踢面高：{UnitConverter.FtToMm(newStairs.ActualRiserHeight):F1} mm\n" +
                     $"梯段净宽：{UnitConverter.FtToMm(finalRun.ActualRunWidth):F0} mm\n" +
                     $"方向角 θ = {angleRad * 180 / Math.PI:F1}°");
-                // ... (保留你原有的 Execute() 前半部分代码不变) ...
-
-                // ==== 替换 Execute() 最后的导出代码 ====
+                // ── 提取全文档室内拓扑网络并导出 GeoJSON ────────────────
                 var stairsTopo = StairTopologyExtractor.Extract(doc);
                 var spacesTopo = StairTopologyExtractor.ExtractSpaces(doc);
                 var pathsTopo = StairTopologyExtractor.ExtractPaths(doc);
@@ -552,13 +532,7 @@ namespace StairsPlugin
         }
 
         /// <summary>
-        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串
-        /// </summary>
-        /// <summary>
-        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串 (兼容 C# 7.3 及更低版本)
-        /// </summary>
-        /// <summary>
-        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串 (兼容 C# 7.3 及更低版本)
+        /// 手动构建符合 kepler.gl 要求的 GeoJSON 字符串（兼容 C# 7.3 及更低版本）。
         ///
         /// 楼梯 Feature 现在输出 4 个航点（底层入口 → 平台入口 → 平台出口 → 顶层出口），
         /// 单跑楼梯退化为 2 点；坐标均由 StairTopologyNode.Points 提供，
