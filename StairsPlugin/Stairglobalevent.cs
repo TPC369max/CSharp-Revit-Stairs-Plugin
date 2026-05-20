@@ -235,7 +235,7 @@ namespace StairsPlugin
                             ? $"{clearResult.MinStepClearanceMm:F0} mm" : "无遮挡";
                         string landingInfo = clearResult.MinLandingClearanceMm >= 0
                             ? $"{clearResult.MinLandingClearanceMm:F0} mm" : "无遮挡";
-
+                        
                         TaskDialog.Show("净空校验通过",
                             $"✓ 梯段最小净高：{stepInfo}（≥ 2200 mm）\n" +
                             $"✓ 平台最小净高：{landingInfo}（≥ 2000 mm）\n\n" +
@@ -503,7 +503,7 @@ namespace StairsPlugin
                 // 失败时为 scope.Start 默认类型，名称可能与 vm.SelectedStairsTypeName 不同）
                 string actualStairsTypeName = (doc.GetElement(newStairs.GetTypeId()) as StairsType)?.Name
                                               ?? "（未知）";
-
+                
                 TaskDialog.Show("生成完成",
                     $"楼梯 ID：{newStairs.Id.IntegerValue}\n" +
                     $"楼梯族类型：{actualStairsTypeName}\n" +

@@ -73,7 +73,7 @@ namespace StairsPlugin.Model
 
                 double baseLevelElevMm = UnitConverter.FtToMm(baseLevel?.Elevation ?? 0);
                 double topLevelElevMm = UnitConverter.FtToMm(topLevel?.Elevation ?? 0);
-
+                double halfZ = (baseLevelElevMm + topLevelElevMm) / 2;
                 // ── 构造 4 点航点列表 ─────────────────────────────────────
                 // [经度比例X, 纬度比例Y, 高程Z_mm]
                 // 单跑楼梯 firstRun == lastRun 时 P1 == P3、P2 == P0，
@@ -81,8 +81,8 @@ namespace StairsPlugin.Model
                 var points = new List<double[]>
                 {
                     new double[] { UnitConverter.FtToMm(p0Raw.X), UnitConverter.FtToMm(p0Raw.Y), baseLevelElevMm },
-                    new double[] { UnitConverter.FtToMm(p1Raw.X), UnitConverter.FtToMm(p1Raw.Y), UnitConverter.FtToMm(p1Raw.Z) },
-                    new double[] { UnitConverter.FtToMm(p2Raw.X), UnitConverter.FtToMm(p2Raw.Y), UnitConverter.FtToMm(p2Raw.Z) },
+                    new double[] { UnitConverter.FtToMm(p1Raw.X), UnitConverter.FtToMm(p1Raw.Y), halfZ },
+                    new double[] { UnitConverter.FtToMm(p2Raw.X), UnitConverter.FtToMm(p2Raw.Y), halfZ },
                     new double[] { UnitConverter.FtToMm(p3Raw.X), UnitConverter.FtToMm(p3Raw.Y), topLevelElevMm  },
                 };
 
