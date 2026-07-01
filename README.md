@@ -14,7 +14,7 @@
 
 本项目脱胎于我的本科毕业设计（地理信息科学专业），关注的是 BIM 几何生产与 3D GIS / CIM 室内网络拓扑之间的连通性问题。
 
-![Demo](docs/images/demo-banner.png)
+![Demo](demo-banner.png)
 <!-- 建议替换为：插件交互界面 + Revit 生成效果的拼图 -->
 
 ## ✨ 核心特性
