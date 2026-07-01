@@ -84,7 +84,6 @@ h = H / (n + 2)           # +2 为 Revit 首尾补偿踢面
 
 对应实现：[`ClearanceChecker.cs`](./ClearanceChecker.cs)（射线检测核心为 `CastRayUp`，起点坐标计算复用 `CoordinateTransform`）。
 
-> 以下项目结构中的相对链接假设所有 `.cs` 文件位于仓库根目录；如果你的解决方案有额外的项目/文件夹嵌套，请按实际路径调整。
 
 ## 📁 项目结构
 
@@ -196,6 +195,6 @@ StairsPlugin/
 
 ## 📄 License
 
-本仓库源码以 [MIT License](./LICENSE) 开源（若尚未添加 `LICENSE` 文件，建议补充一份）。
+本仓库源码以 [MIT License](./LICENSE) 开源。
 
 ⚠️ **重要声明**：`RevitAPI.dll` 与 `RevitAPIUI.dll` 为 Autodesk 专有组件，仅供已安装 Revit 的开发者在本机引用，**不包含在本仓库中，也不可再分发**。使用本项目前需自行准备合法的 Revit 安装环境。
