@@ -181,20 +181,6 @@ StairsPlugin/
 
 对照人工在 Revit 中手动绘制单部双跑楼梯并核对净空（约 2–3 分钟），效率提升明显；主要耗时集中在 Revit 内核提交几何的固有开销，插件自身逻辑（解算 + 校验 + 导出）占比不到三分之一。
 
-## 🖼️ 效果展示
-
-> 以下为占位图片路径，建议替换为 `docs/images/` 下的实际截图或 GIF。
-
-| | |
-| --- | --- |
-| ![插件交互界面](docs/images/ui-panel.png) | ![Revit 3D 生成效果](docs/images/stair-3d.png) |
-| 参数输入与实时合规预览 | 自动生成的双跑楼梯三维效果 |
-
-![净空校验弹窗](docs/images/clearance-dialog.png)
-*净空不合规时的前置拦截弹窗*
-
-![kepler.gl 室内拓扑可视化](docs/images/kepler-topology.png)
-*导出的 GeoJSON 室内拓扑在 kepler.gl 中的三维分层展示*
 
 ## 🚧 已知局限 & Roadmap
 
